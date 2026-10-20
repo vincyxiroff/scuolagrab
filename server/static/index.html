@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>scuolagrab</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+	<h1>scuolagrab</h1>
+	<span class="by">server — by vincyxiroff</span>
+	<span id="userbox" class="hidden">
+		<span id="username"></span>
+		<button id="logout" class="ghost">Esci</button>
+	</span>
+</header>
+
+<main>
+	<section id="authview">
+		<div class="card">
+			<h2 id="authtitle">Accedi</h2>
+			<p class="hint">Le credenziali restano sul server: nel browser viene salvato solo un cookie di sessione.</p>
+			<form id="authform">
+				<label>Username <input id="authuser" autocomplete="username" required></label>
+				<label>Password <input id="authpass" type="password" autocomplete="current-password" required></label>
+				<button type="submit" id="authsubmit">Accedi</button>
+			</form>
+			<p class="switch">Non hai un account? <a href="#" id="authtoggle">Registrati</a></p>
+		</div>
+	</section>
+
+	<section id="appview" class="hidden">
+		<div class="card">
+			<div class="row">
+				<label class="grow">Servizio
+					<select id="service"></select>
+				</label>
+				<span id="tokenstatus" class="badge">—</span>
+			</div>
+			<form id="serviceform" class="row wrap">
+				<label class="grow">Email / username del servizio
+					<input id="serviceuser" autocomplete="username">
+				</label>
+				<label class="grow">Password del servizio
+					<input id="servicepass" type="password" autocomplete="current-password">
+				</label>
+				<button type="submit" id="servicelogin">Salva login</button>
+				<button type="button" id="loadlibrary" class="ghost">Carica libreria</button>
+			</form>
+			<p id="servicemsg" class="hint"></p>
+		</div>
+
+		<div class="card">
+			<div class="row">
+				<h2 class="grow">Libri disponibili</h2>
+				<button id="downloadselected" disabled>Scarica selezionati</button>
+				<button id="downloadall" class="ghost" disabled>Scarica tutti</button>
+			</div>
+			<div class="tablewrap">
+				<table id="library">
+					<thead><tr><th class="check"></th><th>ID</th><th>Titolo</th></tr></thead>
+					<tbody></tbody>
+				</table>
+			</div>
+			<p id="librarymsg" class="hint">Scegli un servizio e carica la libreria.</p>
+		</div>
+
+		<div class="card hidden" id="jobcard">
+			<h2>Download in corso</h2>
+			<ul id="jobitems" class="jobs"></ul>
+		</div>
+
+		<div class="card">
+			<h2>I miei download</h2>
+			<div class="tablewrap">
+				<table id="books">
+					<thead><tr><th>Servizio</th><th>Titolo</th><th>Pagine</th><th>Dimensione</th><th></th></tr></thead>
+					<tbody></tbody>
+				</table>
+			</div>
+			<p id="booksmsg" class="hint">Nessun libro scaricato.</p>
+		</div>
+	</section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
