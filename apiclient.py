@@ -7,7 +7,8 @@ kept in memory for the whole run. The encrypted accounts travel as opaque blobs
 
 import requests
 
-TIMEOUT = 20
+# (connect, read): a server that is down must say so at once, not after a long wait
+TIMEOUT = (5, 20)
 
 class ServerError(Exception):
 	pass

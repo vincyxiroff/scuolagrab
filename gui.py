@@ -4,6 +4,8 @@ import paths
 
 paths.setup()
 
+import i18n
+
 def logexception(exc_type, exc, tb):
 	'''In the packaged app there is no terminal: write the traceback to the data folder'''
 	import traceback
@@ -15,7 +17,7 @@ def logexception(exc_type, exc, tb):
 	print(text, file=sys.stderr)
 	try:
 		from tkinter import messagebox
-		messagebox.showerror("scuolagrab", f"Errore imprevisto: {exc}\n\nDettagli in {paths.datadir() / 'error.log'}")
+		messagebox.showerror("scuolagrab", i18n.t("app.crash", error=exc, log=paths.datadir() / "error.log"))
 	except Exception:
 		pass
 
@@ -47,6 +49,9 @@ settings = config.getconfig()
 # address of the scuolagrab server, used for the account and for the encrypted vault
 DEFAULTSERVER = os.environ.get("SBG_SERVER") or settings.get("app", "Server", fallback="http://84.8.252.233:8749")
 
+# interface language: the saved choice, otherwise the system locale
+LANGUAGE = i18n.setlanguage(utils.getsetting("language", i18n.detect()))
+
 class LoginPage(ttk.Frame):
 	'''Login/registration page shown inside the main window.
 
@@ -56,7 +61,7 @@ class LoginPage(ttk.Frame):
 	the server: the key is derived here with vault.py and never leaves the app.
 	'''
 
-	def __init__(self, master, onsuccess, server=DEFAULTSERVER, username=""):
+	def __init__(self, master, onsuccess, server=DEFAULTSERVER, username="", password=""):
 		super().__init__(master, padding=24)
 		self.onsuccess = onsuccess
 		self.mode = "login"
@@ -65,55 +70,117 @@ class LoginPage(ttk.Frame):
 		self.polldid = None
 
 		self.columnconfigure(1, weight=1)
-		self.rowconfigure(8, weight=1)
+		self.rowconfigure(9, weight=1)
 
 		ttk.Label(self, text=appname, font=("TkDefaultFont", 20, "bold")).grid(row=0, column=0, sticky="w")
-		ttk.Label(self, text="by vincyxiroff", foreground="#666").grid(row=0, column=1, sticky="e")
-		self.hint = ttk.Label(self, text="Accedi con il tuo account scuolagrab, oppure creane uno.", foreground="#666", wraplength=470, justify="left")
+		ttk.Label(self, text=i18n.t("app.tagline"), foreground="#666").grid(row=0, column=1, sticky="e")
+		self.hint = ttk.Label(self, text=i18n.t("login.hint"), foreground="#666", wraplength=470, justify="left")
 		self.hint.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 14))
 
-		ttk.Label(self, text="Server").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=3)
-		self.server = ttk.Entry(self, width=44)
-		self.server.insert(0, server)
-		self.server.grid(row=2, column=1, sticky="we", pady=3)
+		ttk.Label(self, text=i18n.t("login.server")).grid(row=2, column=0, sticky="w", padx=(0, 10), pady=(3, 0))
+		chooser = ttk.Frame(self)
+		chooser.grid(row=2, column=1, sticky="we", pady=(3, 0))
+		self.servermode = tk.StringVar(value="default")
+		# the server hosted for everyone, or one you run yourself
+		self.defaultbutton = ttk.Radiobutton(chooser, text=i18n.t("login.default"), value="default", variable=self.servermode, command=self.updateserver)
+		self.defaultbutton.pack(side="left")
+		self.custombutton = ttk.Radiobutton(chooser, text=i18n.t("login.custom"), value="custom", variable=self.servermode, command=self.updateserver)
+		self.custombutton.pack(side="left", padx=(12, 0))
 
-		ttk.Label(self, text="Username").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=3)
+		ttk.Label(self, text=i18n.t("login.address")).grid(row=3, column=0, sticky="w", padx=(0, 10), pady=3)
+		self.server = ttk.Entry(self, width=44)
+		self.server.insert(0, server or DEFAULTSERVER)
+		self.server.grid(row=3, column=1, sticky="we", pady=3)
+
+		ttk.Label(self, text=i18n.t("login.username")).grid(row=4, column=0, sticky="w", padx=(0, 10), pady=3)
 		self.username = ttk.Entry(self, width=44)
 		self.username.insert(0, username)
-		self.username.grid(row=3, column=1, sticky="we", pady=3)
+		self.username.grid(row=4, column=1, sticky="we", pady=3)
 
-		ttk.Label(self, text="Password").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=3)
+		ttk.Label(self, text=i18n.t("login.password")).grid(row=5, column=0, sticky="w", padx=(0, 10), pady=3)
 		self.password = ttk.Entry(self, width=44, show="*")
-		self.password.grid(row=4, column=1, sticky="we", pady=3)
+		self.password.insert(0, password)
+		self.password.grid(row=5, column=1, sticky="we", pady=3)
 
-		self.confirmlabel = ttk.Label(self, text="Ripeti password")
-		self.confirmlabel.grid(row=5, column=0, sticky="w", padx=(0, 10), pady=3)
+		self.confirmlabel = ttk.Label(self, text=i18n.t("login.confirm"))
+		self.confirmlabel.grid(row=6, column=0, sticky="w", padx=(0, 10), pady=3)
 		self.confirm = ttk.Entry(self, width=44, show="*")
-		self.confirm.grid(row=5, column=1, sticky="we", pady=3)
+		self.confirm.grid(row=6, column=1, sticky="we", pady=3)
 		self.confirmlabel.grid_remove()
 		self.confirm.grid_remove()
 
 		self.status = ttk.Label(self, text="", foreground="#666", wraplength=470, justify="left")
-		self.status.grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 10))
+		self.status.grid(row=7, column=0, columnspan=2, sticky="w", pady=(10, 10))
 
 		buttons = ttk.Frame(self)
-		buttons.grid(row=7, column=0, columnspan=2, sticky="we")
-		self.submitbutton = ttk.Button(buttons, text="Accedi", command=self.submit)
+		buttons.grid(row=8, column=0, columnspan=2, sticky="we")
+		self.submitbutton = ttk.Button(buttons, text=i18n.t("login.signin"), command=self.submit)
 		self.submitbutton.pack(side="left")
-		self.switchbutton = ttk.Button(buttons, text="Crea un account", command=self.switch)
+		self.switchbutton = ttk.Button(buttons, text=i18n.t("login.create"), command=self.switch)
 		self.switchbutton.pack(side="left", padx=8)
 
-		ttk.Label(self, text="Gli account delle piattaforme vengono salvati sul server cifrati con questa password.", foreground="#888", wraplength=470, justify="left").grid(row=8, column=0, columnspan=2, sticky="sw", pady=(16, 0))
+		ttk.Label(self, text=i18n.t("login.note"), foreground="#888", wraplength=470, justify="left").grid(row=9, column=0, columnspan=2, sticky="sw", pady=(16, 0))
+
+		langframe = ttk.Frame(self)
+		langframe.grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
+		ttk.Label(langframe, text=i18n.t("app.language"), foreground="#666").pack(side="left", padx=(0, 8))
+		self.languagebox = ttk.Combobox(langframe, state="readonly", width=12, values=list(i18n.LANGUAGES.values()))
+		self.languagebox.set(i18n.LANGUAGES[i18n.language])
+		self.languagebox.bind("<<ComboboxSelected>>", self.onlanguage)
+		self.languagebox.pack(side="left")
 
 		for widget in (self.server, self.username, self.password, self.confirm):
 			widget.bind("<Return>", self.onsubmit)
 
+		# remember the choice: a custom address stays selected the next time
+		if server and server.strip().rstrip("/") != DEFAULTSERVER.rstrip("/"):
+			self.servermode.set("custom")
+		else:
+			self.servermode.set("default")
+		self.updateserver()
+
 		self.polldid = self.after(80, self.poll)
-		(self.password if username else self.username).focus_set()
+		if password:
+			self.submitbutton.focus_set()
+		else:
+			(self.password if username else self.username).focus_set()
+
+	def updateserver(self, focus=True):
+		'''The address field is usable only with "Altro server"'''
+		custom = self.servermode.get() == "custom"
+		# a disabled Entry ignores delete/insert: edit while it is enabled, then lock it
+		self.server.configure(state="normal")
+		if self.busy:
+			self.server.configure(state="disabled")
+			return
+		if custom:
+			if focus:
+				self.server.focus_set()
+				self.server.selection_range(0, "end")
+		else:
+			self.server.delete(0, "end")
+			self.server.insert(0, DEFAULTSERVER)
+			self.server.configure(state="disabled")
+
+	def serverurl(self):
+		'''Address to connect to: the hosted server or the one typed by the user'''
+		if self.servermode.get() == "custom":
+			return self.server.get().strip()
+		return DEFAULTSERVER
 
 	def onsubmit(self, event=None):
 		self.submit()
 		return "break"
+
+	def onlanguage(self, event=None):
+		'''Switch language without losing what is already typed'''
+		name = self.languagebox.get()
+		for code, label in i18n.LANGUAGES.items():
+			if label == name:
+				app = self.winfo_toplevel()
+				if hasattr(app, "switchlanguage"):
+					app.switchlanguage(code)
+				return
 
 	def switch(self):
 		if self.busy:
@@ -121,18 +188,18 @@ class LoginPage(ttk.Frame):
 		self.mode = "register" if self.mode == "login" else "login"
 		root = self.winfo_toplevel()
 		if self.mode == "register":
-			root.title(f"{appname} — registrazione")
-			self.submitbutton.configure(text="Registrati")
-			self.switchbutton.configure(text="Ho già un account")
-			self.hint.configure(text="Crea l'account sul server. La password protegge anche gli account delle piattaforme: se la perdi non si possono recuperare.")
+			root.title(i18n.t("app.title.register"))
+			self.submitbutton.configure(text=i18n.t("login.registeraction"))
+			self.switchbutton.configure(text=i18n.t("login.back"))
+			self.hint.configure(text=i18n.t("login.hint.register"))
 			self.confirmlabel.grid()
 			self.confirm.grid()
 			self.confirm.focus_set()
 		else:
-			root.title(f"{appname} — accedi o registrati")
-			self.submitbutton.configure(text="Accedi")
-			self.switchbutton.configure(text="Crea un account")
-			self.hint.configure(text="Accedi con il tuo account scuolagrab, oppure creane uno.")
+			root.title(i18n.t("app.title.login"))
+			self.submitbutton.configure(text=i18n.t("login.signin"))
+			self.switchbutton.configure(text=i18n.t("login.create"))
+			self.hint.configure(text=i18n.t("login.hint"))
 			self.confirmlabel.grid_remove()
 			self.confirm.grid_remove()
 		self.setstatus("")
@@ -143,26 +210,28 @@ class LoginPage(ttk.Frame):
 	def setbusy(self, busy):
 		self.busy = busy
 		state = "disabled" if busy else "normal"
-		for widget in (self.submitbutton, self.switchbutton, self.server, self.username, self.password, self.confirm):
+		for widget in (self.submitbutton, self.switchbutton, self.username, self.password, self.confirm, self.defaultbutton, self.custombutton, self.languagebox):
 			widget.configure(state=state)
+		# the address follows the radio choice, not the busy state
+		self.updateserver(focus=False)
 
 	def submit(self):
 		if self.busy:
 			return
-		server = self.server.get().strip()
+		server = self.serverurl()
 		username = self.username.get().strip()
 		password = self.password.get()
 		if not server.startswith(("http://", "https://")):
-			return self.setstatus("L'indirizzo del server deve iniziare con http:// o https://", error=True)
+			return self.setstatus(i18n.t("login.error.url"), error=True)
 		if not username or not password:
-			return self.setstatus("Inserisci username e password.", error=True)
+			return self.setstatus(i18n.t("login.error.credentials"), error=True)
 		if self.mode == "register":
 			if len(password) < 6:
-				return self.setstatus("La password deve avere almeno 6 caratteri.", error=True)
+				return self.setstatus(i18n.t("login.error.short"), error=True)
 			if password != self.confirm.get():
-				return self.setstatus("Le password non coincidono.", error=True)
+				return self.setstatus(i18n.t("login.error.match"), error=True)
 		self.setbusy(True)
-		self.setstatus("Creazione dell'account…" if self.mode == "register" else "Accesso…")
+		self.setstatus(i18n.t("login.busy.register") if self.mode == "register" else i18n.t("login.busy.login"))
 		threading.Thread(target=self.work, args=(self.mode, server, username, password), daemon=True).start()
 
 	def work(self, mode, server, username, password):
@@ -201,7 +270,7 @@ class LoginPage(ttk.Frame):
 				if kind == "ok":
 					return self.finish(payload)
 				self.setbusy(False)
-				self.setstatus(payload, error=True)
+				self.setstatus(i18n.servermessage(payload), error=True)
 		except queue.Empty:
 			pass
 		except tk.TclError:
@@ -230,7 +299,7 @@ class LoginPage(ttk.Frame):
 class App(tk.Tk):
 	def __init__(self, auth=True):
 		super().__init__()
-		self.title(f"{appname} — by vincyxiroff")
+		self.title(i18n.t("app.title"))
 		self.geometry("1000x720")
 		self.minsize(860, 620)
 		self.queue = queue.Queue()
@@ -261,15 +330,51 @@ class App(tk.Tk):
 		for child in self.winfo_children():
 			child.destroy()
 
-	def showlogin(self):
+	def showlogin(self, server=None, username=None, password=None):
 		'''The window always shows a page: a separate modal window is not mapped by every desktop'''
 		self.resetpage()
-		self.title(f"{appname} — accedi o registrati")
+		self.title(i18n.t("app.title.login"))
 		self.minsize(1, 1)
 		self.resizable(False, False)
-		self.geometry("560x500")
-		self.loginpage = LoginPage(self, self.onauth, server=utils.getsetting("server", DEFAULTSERVER), username=utils.getsetting("username", ""))
+		self.geometry("580x530")
+		if server is None:
+			server = utils.getsetting("server", DEFAULTSERVER)
+		if username is None:
+			username = utils.getsetting("username", "")
+		self.loginpage = LoginPage(self, self.onauth, server=server, username=username, password=password or "")
 		self.loginpage.pack(fill="both", expand=True)
+
+	def switchlanguage(self, code):
+		'''Change the interface language and rebuild the current page keeping the user state'''
+		if code == i18n.language:
+			return
+		i18n.setlanguage(code)
+		utils.settingset("language", code)
+		if self.ready:
+			books = self.books
+			self.resetpage()
+			self.build()
+			self.ready = True
+			self.userlabel.configure(text=self.session["username"] if self.session else "")
+			self.refreshaccount()
+			if books:
+				self.books = books
+				for bid, book in books.items():
+					self.tree.insert("", "end", iid=bid, values=(bid, book.get("title", "")))
+				self.setstatus(i18n.t("status.books", count=len(books)))
+		else:
+			page = self.loginpage
+			username = page.username.get() if page else None
+			password = page.password.get() if page else ""
+			server = page.server.get().strip() if page and page.servermode.get() == "custom" else None
+			self.showlogin(server=server, username=username, password=password)
+
+	def onlanguage(self, event=None):
+		name = self.languagebox.get()
+		for code, label in i18n.LANGUAGES.items():
+			if label == name:
+				self.switchlanguage(code)
+				return
 
 	def onauth(self, result):
 		self.session = result
@@ -283,16 +388,16 @@ class App(tk.Tk):
 		self.resizable(True, True)
 		self.minsize(860, 620)
 		self.geometry("1000x720")
-		self.title(f"{appname} — {result['username']}")
+		self.title(i18n.t("app.title.user", user=result["username"]))
 		self.build()
 		self.ready = True
 		self.userlabel.configure(text=result["username"])
-		self.log(f"Accesso come {result['username']}: {len(result['accounts'])} account salvati sul server.")
-		self.log(f"I libri vengono salvati in {self.folder()}")
+		self.log(i18n.t("log.welcome", user=result["username"], count=len(result["accounts"])))
+		self.log(i18n.t("log.folder", folder=self.folder()))
 		if result["failed"]:
-			self.log("Account non leggibili (password diversa o dati rovinati): " + ", ".join(utils.services.get(s, s) for s in result["failed"]))
+			self.log(i18n.t("log.unreadable", list=", ".join(utils.services.get(s, s) for s in result["failed"])))
 		self.refreshaccount()
-		self.setstatus("Pronto")
+		self.setstatus(i18n.t("app.ready"))
 
 	def saveaccount(self, service, username, password):
 		'''Store the platform login on the server, encrypted with the key held in memory'''
@@ -337,13 +442,17 @@ class App(tk.Tk):
 		header = ttk.Frame(self, padding=(16, 12, 16, 4))
 		header.pack(fill="x")
 		ttk.Label(header, text="scuolagrab", font=("TkDefaultFont", 20, "bold")).pack(side="left")
-		ttk.Label(header, text="by vincyxiroff", foreground="#666").pack(side="left", padx=(10, 0), pady=(8, 0))
-		self.logoutbutton = ttk.Button(header, text="Esci", command=self.logout)
+		ttk.Label(header, text=i18n.t("app.tagline"), foreground="#666").pack(side="left", padx=(10, 0), pady=(8, 0))
+		self.logoutbutton = ttk.Button(header, text=i18n.t("app.signout"), command=self.logout)
 		self.logoutbutton.pack(side="right")
 		self.userlabel = ttk.Label(header, text="", foreground="#666")
 		self.userlabel.pack(side="right", padx=8)
+		self.languagebox = ttk.Combobox(header, state="readonly", width=10, values=list(i18n.LANGUAGES.values()))
+		self.languagebox.set(i18n.LANGUAGES[i18n.language])
+		self.languagebox.bind("<<ComboboxSelected>>", self.onlanguage)
+		self.languagebox.pack(side="right", padx=(0, 12))
 
-		top = ttk.LabelFrame(self, text="Servizio", padding=10)
+		top = ttk.LabelFrame(self, text=i18n.t("app.service"), padding=10)
 		top.pack(fill="x", padx=16, pady=(8, 0))
 		self.servicebox = ttk.Combobox(top, state="readonly", values=list(utils.services.values()), width=28)
 		self.servicebox.set(utils.services[self.service])
@@ -352,26 +461,26 @@ class App(tk.Tk):
 		self.tokenlabel = ttk.Label(top, text="", foreground="#666")
 		self.tokenlabel.grid(row=0, column=1, sticky="w", padx=12)
 
-		account = ttk.LabelFrame(self, text="Account del servizio", padding=10)
+		account = ttk.LabelFrame(self, text=i18n.t("app.account"), padding=10)
 		account.pack(fill="x", padx=16, pady=(8, 0))
-		ttk.Label(account, text="Email / username").grid(row=0, column=0, sticky="w")
+		ttk.Label(account, text=i18n.t("app.email")).grid(row=0, column=0, sticky="w")
 		self.email = ttk.Entry(account, width=34)
 		self.email.grid(row=1, column=0, sticky="we", padx=(0, 8))
-		ttk.Label(account, text="Password").grid(row=0, column=1, sticky="w")
+		ttk.Label(account, text=i18n.t("login.password")).grid(row=0, column=1, sticky="w")
 		self.password = ttk.Entry(account, width=26, show="*")
 		self.password.grid(row=1, column=1, sticky="we", padx=(0, 8))
-		self.loginbutton = ttk.Button(account, text="Accedi", command=self.login)
+		self.loginbutton = ttk.Button(account, text=i18n.t("app.signin"), command=self.login)
 		self.loginbutton.grid(row=1, column=2, padx=(0, 8))
-		self.loadbutton = ttk.Button(account, text="Carica libreria", command=self.loadlibrary)
+		self.loadbutton = ttk.Button(account, text=i18n.t("app.loadlibrary"), command=self.loadlibrary)
 		self.loadbutton.grid(row=1, column=3)
 		account.columnconfigure(0, weight=3)
 		account.columnconfigure(1, weight=2)
 
-		booksframe = ttk.LabelFrame(self, text="Libri", padding=10)
+		booksframe = ttk.LabelFrame(self, text=i18n.t("app.books"), padding=10)
 		booksframe.pack(fill="both", expand=True, padx=16, pady=(8, 0))
 		self.tree = ttk.Treeview(booksframe, columns=("id", "title"), show="headings", selectmode="extended")
-		self.tree.heading("id", text="ID")
-		self.tree.heading("title", text="Titolo")
+		self.tree.heading("id", text=i18n.t("app.id"))
+		self.tree.heading("title", text=i18n.t("app.title_column"))
 		self.tree.column("id", width=230, stretch=False)
 		self.tree.column("title", width=620)
 		scroll = ttk.Scrollbar(booksframe, orient="vertical", command=self.tree.yview)
@@ -381,22 +490,22 @@ class App(tk.Tk):
 
 		location = ttk.Frame(self, padding=(16, 8, 16, 0))
 		location.pack(fill="x")
-		ttk.Label(location, text="Salvataggio in", foreground="#666").pack(side="left", padx=(0, 8))
+		ttk.Label(location, text=i18n.t("app.folder"), foreground="#666").pack(side="left", padx=(0, 8))
 		self.folderpath = ttk.Entry(location, state="readonly")
 		self.folderpath.pack(side="left", fill="x", expand=True)
-		ttk.Button(location, text="Apri cartella", command=self.openfolder).pack(side="left", padx=(8, 0))
+		ttk.Button(location, text=i18n.t("app.openfolder"), command=self.openfolder).pack(side="left", padx=(8, 0))
 
 		actions = ttk.Frame(self, padding=(16, 8))
 		actions.pack(fill="x")
-		self.downloadbutton = ttk.Button(actions, text="Scarica selezionati", command=self.downloadselected)
+		self.downloadbutton = ttk.Button(actions, text=i18n.t("app.downloadselected"), command=self.downloadselected)
 		self.downloadbutton.pack(side="left")
-		ttk.Button(actions, text="Scarica tutti", command=lambda: self.download(allbooks=True)).pack(side="left", padx=8)
+		ttk.Button(actions, text=i18n.t("app.downloadall"), command=lambda: self.download(allbooks=True)).pack(side="left", padx=8)
 		self.progress = ttk.Progressbar(actions, mode="determinate", maximum=100)
 		self.progress.pack(side="left", fill="x", expand=True, padx=12)
-		self.status = ttk.Label(actions, text="Pronto", width=34)
+		self.status = ttk.Label(actions, text=i18n.t("app.ready"), width=34)
 		self.status.pack(side="right")
 
-		logframe = ttk.LabelFrame(self, text="Attività", padding=6)
+		logframe = ttk.LabelFrame(self, text=i18n.t("app.activity"), padding=6)
 		logframe.pack(fill="both", expand=False, padx=16, pady=(0, 14))
 		self.logbox = ScrolledText(logframe, height=10, state="disabled", wrap="word")
 		self.logbox.pack(fill="both", expand=True)
@@ -433,9 +542,9 @@ class App(tk.Tk):
 		if account:
 			self.email.insert(0, account["username"])
 			self.password.insert(0, account["password"])
-		text = "Account salvato sul server ✓" if account else "Nessun account salvato"
+		text = i18n.t("app.account.saved") if account else i18n.t("app.account.none")
 		if self.token:
-			text += " · token attivo"
+			text = i18n.t("app.account.token", text=text)
 		self.tokenlabel.configure(text=text)
 
 	def log(self, message):
@@ -496,9 +605,9 @@ class App(tk.Tk):
 			try:
 				result = function()
 			except Exception as e:
-				self.queue.put(("log", f"Errore: {e}"))
+				self.queue.put(("log", i18n.t("log.error", error=e)))
 				self.call(self.setbusy, False)
-				self.call(self.setstatus, "Errore")
+				self.call(self.setstatus, i18n.t("app.error"))
 				if done:
 					self.call(done, None, e)
 				return
@@ -511,11 +620,11 @@ class App(tk.Tk):
 			return
 		email, password = self.email.get().strip(), self.password.get()
 		if not email or not password:
-			messagebox.showwarning(appname, "Inserisci email e password del servizio.")
+			messagebox.showwarning(appname, i18n.t("dialog.needcredential"))
 			return
 		self.setbusy(True)
-		self.setstatus("Login in corso…")
-		self.log(f"Login su {utils.services[self.service]}…")
+		self.setstatus(i18n.t("status.signingin"))
+		self.log(i18n.t("log.loggingin", service=utils.services[self.service]))
 		service = self.service
 
 		def work():
@@ -525,25 +634,25 @@ class App(tk.Tk):
 				try:
 					self.saveaccount(service, email, password)
 				except Exception as e:
-					self.queue.put(("log", f"Account non salvato sul server: {e}"))
+					self.queue.put(("log", i18n.t("log.notsaved", error=i18n.servermessage(e))))
 				return token
 			if token:
-				raise RuntimeError("il servizio ha rifiutato il token ottenuto")
-			raise RuntimeError("credenziali non valide")
+				raise RuntimeError(i18n.t("error.tokenrejected"))
+			raise RuntimeError(i18n.t("error.badcredentials"))
 
 		def done(token, error):
 			self.setbusy(False)
 			if error:
-				self.setstatus("Login fallito")
-				self.log(f"Login fallito: {error}")
+				self.setstatus(i18n.t("status.loginfailed"))
+				self.log(i18n.t("log.loginfailed", error=error))
 				return
 			self.token = token
 			if service in self.accounts:
-				self.tokenlabel.configure(text="Account salvato sul server ✓")
+				self.tokenlabel.configure(text=i18n.t("app.account.saved"))
 			else:
-				self.tokenlabel.configure(text="Token salvato ✓")
-			self.log("Login riuscito.")
-			self.setstatus("Pronto")
+				self.tokenlabel.configure(text=i18n.t("app.token"))
+			self.log(i18n.t("log.loginok"))
+			self.setstatus(i18n.t("app.ready"))
 			if thenload:
 				self.loadlibrary()
 
@@ -558,34 +667,34 @@ class App(tk.Tk):
 		if not self.tree.get_children():
 			self.token = utils.gettoken(self.userid, self.service) if self.userid else None
 		self.setbusy(True)
-		self.setstatus("Carico la libreria…")
-		self.log(f"Carico la libreria di {utils.services[self.service]}…")
+		self.setstatus(i18n.t("status.loadinglibrary"))
+		self.log(i18n.t("log.loadinglibrary", service=utils.services[self.service]))
 		token = self.token
 
 		def work():
 			if not utils.checktoken(self.service, token):
-				raise RuntimeError("token scaduto, effettua di nuovo il login")
+				raise RuntimeError(i18n.t("error.tokenexpired"))
 			return utils.library(self.service, token)
 
 		def done(books, error):
 			self.setbusy(False)
 			if error:
-				self.setstatus("Libreria non disponibile")
-				self.log(f"Impossibile caricare la libreria: {error}")
+				self.setstatus(i18n.t("status.libraryfailed"))
+				self.log(i18n.t("log.libraryfailed", error=error))
 				return
 			self.books = books
 			self.tree.delete(*self.tree.get_children())
 			for bid, book in books.items():
 				self.tree.insert("", "end", iid=bid, values=(bid, book.get("title", "")))
-			self.log(f"Trovati {len(books)} libri.")
-			self.setstatus(f"{len(books)} libri")
+			self.log(i18n.t("log.books", count=len(books)))
+			self.setstatus(i18n.t("status.books", count=len(books)))
 
 		self.task(work, done)
 
 	def downloadselected(self):
 		selected = list(self.tree.selection())
 		if not selected:
-			messagebox.showinfo(appname, "Seleziona almeno un libro.")
+			messagebox.showinfo(appname, i18n.t("dialog.needbook"))
 			return
 		self.download(ids=selected)
 
@@ -593,7 +702,7 @@ class App(tk.Tk):
 		if self.busy:
 			return
 		if not self.books:
-			messagebox.showinfo(appname, "Carica prima la libreria.")
+			messagebox.showinfo(appname, i18n.t("dialog.needlibrary"))
 			return
 		if allbooks:
 			ids = list(self.books)
@@ -609,7 +718,7 @@ class App(tk.Tk):
 			downloaded, failed = [], []
 			for index, bid in enumerate(ids):
 				data = self.books[bid]
-				self.queue.put(("log", f"Scarico {data.get('title', bid)}…"))
+				self.queue.put(("log", i18n.t("log.downloading", title=data.get("title", bid))))
 				last = [-1, ""]
 
 				def progress(value, status=""):
@@ -620,23 +729,23 @@ class App(tk.Tk):
 				try:
 					path = Path(utils.downloadbook(service, token, bid, data, progress)).resolve()
 					downloaded.append(str(path))
-					self.queue.put(("log", f"Salvato: {path}"))
+					self.queue.put(("log", i18n.t("log.saved", path=path)))
 				except Exception as e:
 					failed.append((data.get("title", bid), str(e)))
-					self.queue.put(("log", f"Errore su {data.get('title', bid)}: {e}"))
+					self.queue.put(("log", i18n.t("log.downloaderror", title=data.get("title", bid), error=e)))
 			return downloaded, failed
 
 		def done(result, error):
 			self.setbusy(False)
 			if error:
-				self.setstatus("Download fallito")
+				self.setstatus(i18n.t("status.downloadfailed"))
 				return
 			downloaded, failed = result
 			self.progress["value"] = 100
-			self.setstatus(f"{len(downloaded)} scaricati, {len(failed)} falliti")
-			self.log(f"Finito: {len(downloaded)} scaricati, {len(failed)} falliti.")
+			self.setstatus(i18n.t("status.done", downloaded=len(downloaded), failed=len(failed)))
+			self.log(i18n.t("log.done", downloaded=len(downloaded), failed=len(failed)))
 			if failed:
-				messagebox.showwarning(appname, "Alcuni libri non sono stati scaricati:\n" + "\n".join(t for t, _ in failed))
+				messagebox.showwarning(appname, i18n.t("dialog.failedbooks", list="\n".join(title for title, _ in failed)))
 
 		self.task(work, done)
 
@@ -654,7 +763,7 @@ class App(tk.Tk):
 				if subprocess.run(["xdg-open", str(folder)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode:
 					raise RuntimeError("xdg-open failed")
 		except Exception:
-			messagebox.showinfo(appname, f"Non riesco ad aprire il file manager.\n\nI libri sono in:\n{folder}")
+			messagebox.showinfo(appname, i18n.t("dialog.nofilemanager", folder=folder))
 
 if __name__ == "__main__":
 	if "--checkbrowser" in sys.argv:

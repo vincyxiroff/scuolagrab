@@ -25,6 +25,7 @@ Scarica i tuoi libri di testo digitali in PDF, con indice e page label ricostrui
   - [Linux and macOS](#linux-and-macos)
   - [First run](#first-run)
   - [Accounts and encryption](#accounts-and-encryption)
+  - [Interface language](#interface-language)
   - [Local data](#local-data)
   - [Prebuilt apps](#prebuilt-apps)
   - [Build the apps yourself](#build-the-apps-yourself)
@@ -138,12 +139,16 @@ The GUI does the same with buttons, after the login window described below: choo
 
 `gui.py` does not start without an account, because the account is where the platform logins are kept:
 
-1. the app opens on the login page (same window, no second window): server address, username, password; **Crea un account** registers a new one on the server and **Esci** brings the page back
+1. the app opens on the login page (same window, no second window): **Predefinito** uses the hosted server (`http://84.8.252.233:8749`), **Altro server** lets you type your own address (the last one used is remembered), then username and password; **Crea un account** registers a new one on the server and **Esci** brings the page back
 2. the account is the same one used by the web version (`http://SERVER-IP:8749`), so one registration works everywhere
 3. every platform login made in the GUI (bSmart, Mondadori, Sanoma) is encrypted **inside the app** with AES-256-GCM, using a key derived with PBKDF2-SHA256 (300 000 rounds) from your password and a per-user salt
 4. the server stores only `nonce` + ciphertext: reading `server/data/server.db` gives nothing usable, and the app decrypts the accounts when you log in
 
 The key never leaves the app, so the server cannot read the saved accounts. The other side of the coin: lose the password and the saved logins are unrecoverable (the app only shows "account non leggibile"). The login password itself travels in the request body, like any login form: over plain HTTP it can be read on the path (see the note in the server section).
+
+### Interface language
+
+The GUI exists in **English and Italian**: the selector is at the bottom of the login page and, once signed in, in the header of the main window. The choice is saved in `db.json` (settings table) and wins over the system locale; without a saved choice the app follows `LANG` (Italian only when the locale starts with `it`, English otherwise). Switching language keeps what you already typed and, in the main window, the signed-in account. The CLI (`main.py`) stays in English.
 
 ### Local data
 
@@ -346,7 +351,7 @@ Each server user has their own logins and books, isolated from the others. It is
 | | `Author` | author in the PDF metadata (empty = no author) |
 | `[pdfgrabber]` | `AskPassword` | ask for the local user password at every start |
 | | `ShowBanner` | show the CLI banner |
-| `[app]` | `Server` | server used by the GUI for login and the encrypted accounts (default `http://84.8.252.233:8749`, override with `SBG_SERVER`) |
+| `[app]` | `Server` | address of the **Predefinito** server in the login page (default `http://84.8.252.233:8749`, override with `SBG_SERVER`) |
 | `[hbs]` | `Downloader` | `chapters` (default, the only one still served) or `documentengine` with automatic fallback |
 | | `ClientVersion` | client version sent to the Mondadori viewer |
 | `[plc]` | `Workers` | pages downloaded in parallel (default 6) |
@@ -424,6 +429,7 @@ Provided "as is", without warranty. Use it only for books you are legitimately a
   - [Linux e macOS](#linux-e-macos)
   - [Primo avvio](#primo-avvio)
   - [Account e cifratura](#account-e-cifratura)
+  - [Lingua dell'interfaccia](#lingua-dellinterfaccia)
   - [Dati locali](#dati-locali)
   - [App già pronte](#app-già-pronte)
   - [Compilare le app](#compilare-le-app)
@@ -537,12 +543,16 @@ La GUI fa le stesse cose con i pulsanti, dopo la finestra di accesso descritta q
 
 `gui.py` non parte senza un account, perché è lì che vengono tenuti i login delle piattaforme:
 
-1. l'app si apre sulla pagina di accesso (stessa finestra, nessuna seconda finestra): indirizzo del server, username e password; **Crea un account** ne registra uno nuovo sul server e **Esci** riporta a questa pagina
+1. l'app si apre sulla pagina di accesso (stessa finestra, nessuna seconda finestra): **Predefinito** usa il server già hostato (`http://84.8.252.233:8749`), **Altro server** permette di scrivere il proprio indirizzo (l'ultimo usato viene ricordato), poi username e password; **Crea un account** ne registra uno nuovo sul server e **Esci** riporta a questa pagina
 2. l'account è lo stesso della versione web (`http://IP-DEL-SERVER:8749`), quindi una registrazione vale ovunque
 3. ogni login di piattaforma fatto nella GUI (bSmart, Mondadori, Sanoma) viene cifrato **dentro l'app** con AES-256-GCM, con una chiave derivata con PBKDF2-SHA256 (300 000 iterazioni) dalla tua password e da un salt per utente
 4. il server salva solo `nonce` + ciphertext: leggere `server/data/server.db` non dà nulla di utilizzabile, e l'app decifra gli account quando fai l'accesso
 
 La chiave non esce mai dall'app, quindi il server non può leggere gli account salvati. Il rovescio della medaglia: se perdi la password i login salvati non si recuperano (l'app scrive "account non leggibile"). La password di accesso viaggia comunque nel corpo della richiesta, come in qualsiasi form di login: su HTTP in chiaro chi sta sulla rete può leggerla (vedi la nota nella sezione del server).
+
+### Lingua dell'interfaccia
+
+La GUI è disponibile in **inglese e italiano**: il selettore è in fondo alla pagina di accesso e, dopo il login, nell'intestazione della finestra principale. La scelta viene salvata in `db.json` (tabella settings) e ha la precedenza sulla lingua di sistema; senza una scelta salvata l'app segue `LANG` (italiano solo se il locale inizia con `it`, altrimenti inglese). Cambiando lingua non si perde quello che hai già scritto e, nella finestra principale, l'account con cui sei entrato. La CLI (`main.py`) resta in inglese.
 
 ### Dati locali
 
@@ -745,7 +755,7 @@ Ogni utente del server ha i suoi login e i suoi libri, isolati dagli altri. È l
 | | `Author` | autore nei metadati del PDF (vuoto = nessun autore) |
 | `[pdfgrabber]` | `AskPassword` | chiede la password dell'utente locale a ogni avvio |
 | | `ShowBanner` | banner all'avvio della CLI |
-| `[app]` | `Server` | server usato dalla GUI per login e account cifrati (default `http://84.8.252.233:8749`, si può forzare con `SBG_SERVER`) |
+| `[app]` | `Server` | indirizzo del server **Predefinito** nella pagina di accesso (default `http://84.8.252.233:8749`, si può forzare con `SBG_SERVER`) |
 | `[hbs]` | `Downloader` | `chapters` (default, l'unico ancora servito) o `documentengine` con fallback automatico |
 | | `ClientVersion` | versione client inviata al viewer Mondadori |
 | `[plc]` | `Workers` | pagine scaricate in parallelo (default 6) |
