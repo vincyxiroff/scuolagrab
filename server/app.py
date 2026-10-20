@@ -116,6 +116,8 @@ def runjob(jobid):
 			try:
 				path, pages = savepdf(job["service"], token, bookid, data, progress)
 			except Exception as e:
+				# the error stays in the job for the page, the traceback goes to the journal (stderr)
+				traceback.print_exc()
 				item["status"] = "error"
 				item["error"] = str(e) or e.__class__.__name__
 				continue
@@ -124,6 +126,7 @@ def runjob(jobid):
 			item["progress"] = 100
 			item["pages"] = pages
 	except Exception as e:
+		traceback.print_exc()
 		with jobslock:
 			job["error"] = str(e) or e.__class__.__name__
 		for item in job["items"]:

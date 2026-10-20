@@ -121,7 +121,7 @@ Requisito: all'apertura l'app deve chiedere login/registrazione sul sito, e gli 
 
 ### 4. Documentazione
 
-- `README.md`: bilingue (inglese + italiano) con indice, keyword, setup client e server, `install.sh`, configurazione, troubleshooting; rimosse le sezioni nginx/HTTPS su richiesta. 51 heading, 48 link interni, 0 rotti.
+- `README.md`: bilingue (inglese + italiano) con indice, keyword, setup client e server, `install.sh`, configurazione, troubleshooting; rimosse le sezioni nginx/HTTPS su richiesta. Aggiunte le sezioni account/cifratura, API dell'app e **log del server** (`journalctl -u scuolagrab`, persistenza del journal, `--vacuum-size`). 67 heading, 58 link interni, 0 rotti, code fence bilanciate.
 - `config-default.ini`: nuove opzioni `[hbs]` e `[plc]` con commenti.
 - `config.ini` locale rigenerato dal nuovo default.
 

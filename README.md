@@ -24,6 +24,7 @@ Scarica i tuoi libri di testo digitali in PDF, con indice e page label ricostrui
   - [Windows](#windows)
   - [Linux and macOS](#linux-and-macos)
   - [First run](#first-run)
+  - [Accounts and encryption](#accounts-and-encryption)
   - [Local data](#local-data)
   - [Prebuilt apps](#prebuilt-apps)
   - [Build the apps yourself](#build-the-apps-yourself)
@@ -32,7 +33,9 @@ Scarica i tuoi libri di testo digitali in PDF, con indice e page label ricostrui
   - [Automatic install script](#automatic-install-script)
   - [Install](#install)
   - [First start](#first-start)
+  - [API used by the app](#api-used-by-the-app)
   - [systemd service](#systemd-service)
+  - [Server logs](#server-logs)
   - [Backups and security](#backups-and-security)
   - [Update](#update)
 - [Browser client](#browser-client)
@@ -275,10 +278,30 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now scuolagrab
 sudo systemctl status scuolagrab
-sudo journalctl -u scuolagrab -f      # logs
 ```
 
 Firewall: `sudo ufw allow 8749/tcp` so the page is reachable from other machines.
+
+### Server logs
+
+The service writes to the systemd journal: the unit does not set `StandardOutput`, so everything the program prints ends up there: the startup lines, **one line per HTTP request** (`127.0.0.1 [20/Oct/2026 13:17:49] "GET /api/me HTTP/1.1" 200 -`) and the **traceback of a download or of a request that failed** (the error is also shown in the page).
+
+```bash
+sudo journalctl -u scuolagrab -f                 # live
+sudo journalctl -u scuolagrab -n 200 --no-pager  # last 200 lines
+sudo journalctl -u scuolagrab --since today
+sudo journalctl -u scuolagrab -p warning         # warnings and errors only
+sudo systemctl status scuolagrab                 # state + last lines
+```
+
+If you started it by hand, the log is the terminal output; to keep a copy:
+
+```bash
+cd /opt/scuolagrab
+sudo -u scuolagrab .venv/bin/python server/app.py --host 0.0.0.0 2>&1 | tee -a server.log
+```
+
+Logs survive a reboot only if the journal is persistent (on minimal systems: `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`). To cap the space: `sudo journalctl --vacuum-size=200M`.
 
 ### Backups and security
 
@@ -400,6 +423,7 @@ Provided "as is", without warranty. Use it only for books you are legitimately a
   - [Windows](#windows-1)
   - [Linux e macOS](#linux-e-macos)
   - [Primo avvio](#primo-avvio)
+  - [Account e cifratura](#account-e-cifratura)
   - [Dati locali](#dati-locali)
   - [App già pronte](#app-già-pronte)
   - [Compilare le app](#compilare-le-app)
@@ -408,7 +432,9 @@ Provided "as is", without warranty. Use it only for books you are legitimately a
   - [Script di installazione](#script-di-installazione)
   - [Installazione](#installazione)
   - [Primo avvio del server](#primo-avvio-del-server)
+  - [API usata dall'app](#api-usata-dallapp)
   - [Servizio systemd](#servizio-systemd)
+  - [Log del server](#log-del-server)
   - [Backup e sicurezza](#backup-e-sicurezza)
   - [Aggiornamento](#aggiornamento)
 - [Client via browser](#client-via-browser)
@@ -651,10 +677,30 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now scuolagrab
 sudo systemctl status scuolagrab
-sudo journalctl -u scuolagrab -f      # log
 ```
 
 Firewall: `sudo ufw allow 8749/tcp` così la pagina è raggiungibile dalle altre macchine.
+
+### Log del server
+
+Il servizio scrive nel journal di systemd: l'unit non imposta `StandardOutput`, quindi tutto quello che il programma stampa finisce lì: le righe di avvio, **una riga per richiesta HTTP** (`127.0.0.1 [20/Oct/2026 13:17:49] "GET /api/me HTTP/1.1" 200 -`) e il **traceback di un download o di una richiesta fallita** (l'errore si vede anche nella pagina).
+
+```bash
+sudo journalctl -u scuolagrab -f                 # in diretta, segui
+sudo journalctl -u scuolagrab -n 200 --no-pager  # ultime 200 righe
+sudo journalctl -u scuolagrab --since today
+sudo journalctl -u scuolagrab -p warning         # solo warning ed errori
+sudo systemctl status scuolagrab                 # stato + ultime righe
+```
+
+Se lo hai avviato a mano il log è l'output del terminale; per tenerne una copia:
+
+```bash
+cd /opt/scuolagrab
+sudo -u scuolagrab .venv/bin/python server/app.py --host 0.0.0.0 2>&1 | tee -a server.log
+```
+
+I log restano anche dopo un riavvio solo se il journal è persistente (sui sistemi minimali: `sudo mkdir -p /var/log/journal && sudo systemctl restart systemd-journald`). Per limitarne lo spazio: `sudo journalctl --vacuum-size=200M`.
 
 ### Backup e sicurezza
 
