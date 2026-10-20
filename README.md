@@ -25,6 +25,8 @@ Scarica i tuoi libri di testo digitali in PDF, con indice e page label ricostrui
   - [Linux and macOS](#linux-and-macos)
   - [First run](#first-run)
   - [Local data](#local-data)
+  - [Prebuilt apps](#prebuilt-apps)
+  - [Build the apps yourself](#build-the-apps-yourself)
 - [Server setup](#server-setup)
   - [Server requirements](#server-requirements)
   - [Automatic install script](#automatic-install-script)
@@ -139,6 +141,28 @@ config.ini                      local configuration (created from config-default
 ```
 
 Platform tokens are stored in plain text in `db.json`: the file is gitignored, do not share it.
+
+### Prebuilt apps
+
+Every `v*` tag makes GitHub Actions publish the desktop app:
+
+| system | file | notes |
+| ------ | ---- | ----- |
+| Linux x86_64 | `scuolagrab-x86_64.AppImage` | `chmod +x` and run it |
+| Windows x64 | `scuolagrab-windows-x64.zip` → `scuolagrab.exe` | unsigned: SmartScreen → "More info" → "Run anyway" |
+| macOS arm64/x64 | `scuolagrab-macos-*.zip` → `scuolagrab.app` | unsigned: right click → Open, or `xattr -dr com.apple.quarantine scuolagrab.app` |
+
+The apps keep config, database and PDFs in the user data folder: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). Chromium is bundled, so the Sanoma login works out of the box. On Linux, if Chromium complains about missing libraries: `sudo apt install libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1`.
+
+### Build the apps yourself
+
+```bash
+python3 -m pip install -r requirements.txt pyinstaller
+python3 packaging/build.py                 # bundles Chromium (~400 MB)
+python3 packaging/build.py --no-browsers   # smaller, Sanoma needs Chromium installed later
+```
+
+The files end up in `packaging/dist/` (AppImage on Linux, ZIP with the `.exe` on Windows, ZIP with the `.app` on macOS). PyInstaller does not cross-compile: build on the target system. `.github/workflows/build.yml` runs the same script on Linux, Windows and macOS and attaches the files to the GitHub release when a `v*` tag is pushed.
 
 ## Server setup
 
@@ -291,6 +315,9 @@ server/db.py         server SQLite layer
 server/static/       web interface
 config-default.ini   default options
 install.sh           guided server installer
+paths.py             writable data folder for the packaged app
+packaging/           PyInstaller spec + cross-platform build script
+.github/workflows/   GitHub Actions build/release workflow
 ```
 
 ## Service notes
@@ -314,6 +341,9 @@ install.sh           guided server installer
 | Chromium fails to start on Linux | `sudo python3 -m playwright install-deps chromium` |
 | `pip` refuses to install (PEP 668) | use a virtualenv (`.venv`) as in the guide |
 | Sanoma PDF without selectable text | expected: pages are viewer images/vectors |
+| Windows warns about an unknown publisher | the exe is unsigned: "More info" → "Run anyway" |
+| macOS says the app is damaged or from an unknown developer | right click → Open, or `xattr -dr com.apple.quarantine scuolagrab.app` |
+| the AppImage does not start | `chmod +x scuolagrab-x86_64.AppImage`; for the Sanoma login install `libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1` |
 
 ## License and disclaimer
 
@@ -336,6 +366,8 @@ Provided "as is", without warranty. Use it only for books you are legitimately a
   - [Linux e macOS](#linux-e-macos)
   - [Primo avvio](#primo-avvio)
   - [Dati locali](#dati-locali)
+  - [App già pronte](#app-già-pronte)
+  - [Compilare le app](#compilare-le-app)
 - [Setup del server](#setup-del-server)
   - [Requisiti del server](#requisiti-del-server)
   - [Script di installazione](#script-di-installazione)
@@ -450,6 +482,28 @@ config.ini                       configurazione locale (creata da config-default
 ```
 
 I token delle piattaforme sono salvati in chiaro in `db.json`: quel file è gitignored, non condividerlo.
+
+### App già pronte
+
+Ogni tag `v*` fa pubblicare a GitHub Actions l'app desktop:
+
+| sistema | file | note |
+| ------- | ---- | ----- |
+| Linux x86_64 | `scuolagrab-x86_64.AppImage` | `chmod +x` e avviala |
+| Windows x64 | `scuolagrab-windows-x64.zip` → `scuolagrab.exe` | non firmata: SmartScreen → "Ulteriori informazioni" → "Esegui comunque" |
+| macOS arm64/x64 | `scuolagrab-macos-*.zip` → `scuolagrab.app` | non firmata: tasto destro → Apri, oppure `xattr -dr com.apple.quarantine scuolagrab.app` |
+
+Le app tengono config, database e PDF nella cartella dati dell'utente: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). Chromium è incluso, quindi il login Sanoma funziona senza installare altro. Su Linux, se Chromium lamenta librerie mancanti: `sudo apt install libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1`.
+
+### Compilare le app
+
+```bash
+python3 -m pip install -r requirements.txt pyinstaller
+python3 packaging/build.py                 # include Chromium (~400 MB)
+python3 packaging/build.py --no-browsers   # più piccola, Sanoma richiede Chromium a parte
+```
+
+I file finiscono in `packaging/dist/` (AppImage su Linux, ZIP con `.exe` su Windows, ZIP con `.app` su macOS). PyInstaller non fa cross-compilazione: compila sul sistema di destinazione. `.github/workflows/build.yml` esegue lo stesso script su Linux, Windows e macOS e allega i file alla release quando pushi un tag `v*`.
 
 ## Setup del server
 
@@ -602,6 +656,9 @@ server/db.py         livello SQLite del server
 server/static/       interfaccia web
 config-default.ini   opzioni predefinite
 install.sh           installer guidato del server
+paths.py             cartella dati scrivibile per l'app pacchettizzata
+packaging/           spec PyInstaller + script di build multipiattaforma
+.github/workflows/   workflow GitHub Actions di build/release
 ```
 
 ## Note per servizio
@@ -625,6 +682,9 @@ install.sh           installer guidato del server
 | Chromium non parte su Linux | `sudo python3 -m playwright install-deps chromium` |
 | `pip` rifiuta l'installazione (PEP 668) | usa un virtualenv (`.venv`) come nella guida |
 | PDF Sanoma senza testo selezionabile | atteso: le pagine sono immagini/vettori del viewer |
+| Windows avvisa di un editore sconosciuto | l'exe non è firmato: "Ulteriori informazioni" → "Esegui comunque" |
+| macOS dice che l'app è danneggiata o di uno sviluppatore sconosciuto | tasto destro → Apri, oppure `xattr -dr com.apple.quarantine scuolagrab.app` |
+| l'AppImage non parte | `chmod +x scuolagrab-x86_64.AppImage`; per il login Sanoma installa `libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1` |
 
 ## Licenza e disclaimer
 

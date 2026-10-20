@@ -1,5 +1,10 @@
 files/
 
+build/
+dist/
+packaging/build/
+packaging/dist/
+
 server/data/
 
 db.json

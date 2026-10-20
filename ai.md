@@ -93,6 +93,16 @@ Server web autonomo, senza framework aggiuntivi (solo stdlib: `ThreadingHTTPServ
 - `GET /api/me` risponde `200 {"username": null}` quando non c'è sessione, così la pagina non riempie la console del browser con un 401 all'avvio.
 - Il controllo dipendenze del server non fa domande: se manca qualcosa stampa i due comandi `pip install`/`playwright install` ed esce (un servizio non deve restare in attesa di input).
 
+### 4e. App desktop pacchettizzate (`packaging/`)
+
+- **`paths.py`**: quando il programma gira dal sorgente non cambia niente (cwd = cartella del progetto). Nei bundle PyInstaller (`sys.frozen`) config, `db.json`, `files/` e cache dei browser vanno nella cartella dati utente: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). Imposta anche `PLAYWRIGHT_BROWSERS_PATH` alla cartella `browsers/` inclusa nel bundle. Usato da `config.py`, `utils.py` e `gui.py` (prima di importare le dipendenze).
+- **`dependencies.py`**: in modalità frozen non tenta `pip install` (build incompleta = errore chiaro) e installa Chromium con il driver playwright incluso (`playwright.__main__`), non con un sottoprocesso `python -m`.
+- **`gui.py`**: entry point dei bundle, con `--selftest` che costruisce la finestra, stampa titolo e numero servizi ed esce con 0 (usato per verificare l'app compilata).
+- **`packaging/scuolagrab.spec`**: onefile solo su Windows; onedir su Linux/macOS (BUNDLE `.app` su macOS); `collect_all("playwright")` per il driver node, hiddenimports `services.bsm/hbs/plc` (import dinamici), esclusi pandas/numpy/botocore/openpyxl/ecc. che entravano dall'analisi ma non servono.
+- **`packaging/build.py`**: scarica Chromium in `packaging/build/browsers` e lo passa allo spec (`SCUOLAGRAB_BROWSERS`), lancia PyInstaller e produce: AppImage su Linux (AppDir + AppRun + .desktop + icona generata con PyMuPDF, `appimagetool` scaricato e usato con `APPIMAGE_EXTRACT_AND_RUN=1`), ZIP con `.exe` su Windows, ZIP con `.app` su macOS (`ditto`). `--no-browsers` per build leggere.
+- **`.github/workflows/build.yml`**: matrix Ubuntu 22.04 / Windows / macOS 14 (arm64) / macOS 13 (x64); su tag `v*` allega AppImage e ZIP alla release con `softprops/action-gh-release`, altrimenti artifact.
+- **Estensioni per il bundle**: `gui.py` accetta `--selftest` (costruisce la finestra e stampa titolo/servizi) e `--checkbrowser` (lancia Chromium dal driver incluso) e installa un `sys.excepthook` che scrive `error.log` nella cartella dati e mostra un messagebox (sull'exe non c'è terminale). `dependencies.ensure(interactive=False)` non chiede né scarica nulla nei self test; `rich` è controllato solo fuori dal bundle (la GUI non lo usa).
+
 ### 4. Documentazione
 
 - `README.md`: bilingue (inglese + italiano) con indice, keyword, setup client e server, `install.sh`, configurazione, troubleshooting; rimosse le sezioni nginx/HTTPS su richiesta. 51 heading, 48 link interni, 0 rotti.
@@ -120,6 +130,7 @@ Server web autonomo, senza framework aggiuntivi (solo stdlib: `ThreadingHTTPServ
 - Metadati: `Author` vuoto in config ora produce davvero un autore vuoto (prima veniva scritto `none`).
 - Token Sanoma salvato ora contiene **solo** `MY_PLACE_SESSION` (verificato che basti per libreria, `display-books` e `master.json`); rifatto il login per sostituire il vecchio cookie jar che conteneva l'email nei cookie di analytics.
 - Login Sanoma reso più robusto: timeout Auth0 più ampi e un secondo tentativo, perché un caricamento lento veniva scambiato per password errata (errore visto nella prima prova via server). `checktoken` ora restituisce `False` sui timeout di rete invece di lanciare un traceback.
+- **Build desktop (Linux, Python 3.14, PyInstaller 6.22)**: `python3 packaging/build.py --no-browsers` → onedir + **AppImage 120 MB** in `packaging/dist/`; `--selftest` exit 0 su entrambi; cartella dati creata in `~/.local/share/scuolagrab` con `config.ini` + `db.json`; `--checkbrowser` con i browser del sistema linkati nel bundle → `chromium ok: 156.0.8078.4` (driver node incluso funzionante). Non testati Windows/macOS (servono i runner CI) né la build con Chromium incluso (~400 MB in più).
 - **Server**: avvio con dipendenze presenti; `GET /` e statici 200, path traversal 404; registrazione/login/logout e cookie HttpOnly verificati; libreria Sanoma (3 libri) e bSmart (19 libri) dal server; download Sanoma (162 pagine, 16 MB) e bSmart (25 pagine) via API con progress; `/api/books` e `/api/file/<id>` (Content-Type/Content-Length/nome file corretti, PDF aperto con 162 pagine/71 voci); isolamento tra utenti (file e job di un altro utente 404); token eliminabile; sessione valida dopo riavvio del server (dati in SQLite); UI web provata in Chromium headless (login, tre servizi, stati vuoti e "login richiesto", nessun errore in console).
 
 ## Cose da fare / limiti noti

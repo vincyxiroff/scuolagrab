@@ -1,7 +1,29 @@
 import sys
+
+import paths
+
+paths.setup()
+
+def logexception(exc_type, exc, tb):
+	'''In the packaged app there is no terminal: write the traceback to the data folder'''
+	import traceback
+	text = "".join(traceback.format_exception(exc_type, exc, tb))
+	try:
+		(paths.datadir() / "error.log").write_text(text)
+	except Exception:
+		pass
+	print(text, file=sys.stderr)
+	try:
+		from tkinter import messagebox
+		messagebox.showerror("scuolagrab", f"Errore imprevisto: {exc}\n\nDettagli in {paths.datadir() / 'error.log'}")
+	except Exception:
+		pass
+
+sys.excepthook = logexception
+
 import dependencies
 
-if not dependencies.ensure(gui=True):
+if not dependencies.ensure(gui=True, interactive=not any(a in sys.argv for a in ("--selftest", "--checkbrowser"))):
 	sys.exit(1)
 
 import os
@@ -316,4 +338,16 @@ class App(tk.Tk):
 			messagebox.showinfo(appname, f"Cartella: {folder.resolve()}")
 
 if __name__ == "__main__":
+	if "--checkbrowser" in sys.argv:
+		from playwright.sync_api import sync_playwright
+		with sync_playwright() as p:
+			browser = p.chromium.launch()
+			print(f"chromium ok: {browser.version}")
+			browser.close()
+		sys.exit(0)
+	if "--selftest" in sys.argv:
+		app = App()
+		print(f"ok: {app.title()} — {len(app.servicebox['values'])} services")
+		app.destroy()
+		sys.exit(0)
 	App().mainloop()

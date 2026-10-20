@@ -5,8 +5,9 @@ from hashlib import sha256
 from pathlib import Path
 import os
 import config
+import paths
 
-os.chdir(Path(__file__).parent)
+paths.setup()
 
 config = config.getconfig()
 
