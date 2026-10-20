@@ -135,7 +135,7 @@ The GUI does the same with buttons, after the login window described below: choo
 
 `gui.py` does not start without an account, because the account is where the platform logins are kept:
 
-1. the login window asks for the server address, username and password; **Crea un account** registers a new one on the server
+1. the app opens on the login page (same window, no second window): server address, username, password; **Crea un account** registers a new one on the server and **Esci** brings the page back
 2. the account is the same one used by the web version (`http://SERVER-IP:8749`), so one registration works everywhere
 3. every platform login made in the GUI (bSmart, Mondadori, Sanoma) is encrypted **inside the app** with AES-256-GCM, using a key derived with PBKDF2-SHA256 (300 000 rounds) from your password and a per-user salt
 4. the server stores only `nonce` + ciphertext: reading `server/data/server.db` gives nothing usable, and the app decrypts the accounts when you log in
@@ -511,7 +511,7 @@ La GUI fa le stesse cose con i pulsanti, dopo la finestra di accesso descritta q
 
 `gui.py` non parte senza un account, perché è lì che vengono tenuti i login delle piattaforme:
 
-1. la finestra di accesso chiede indirizzo del server, username e password; **Crea un account** ne registra uno nuovo sul server
+1. l'app si apre sulla pagina di accesso (stessa finestra, nessuna seconda finestra): indirizzo del server, username e password; **Crea un account** ne registra uno nuovo sul server e **Esci** riporta a questa pagina
 2. l'account è lo stesso della versione web (`http://IP-DEL-SERVER:8749`), quindi una registrazione vale ovunque
 3. ogni login di piattaforma fatto nella GUI (bSmart, Mondadori, Sanoma) viene cifrato **dentro l'app** con AES-256-GCM, con una chiave derivata con PBKDF2-SHA256 (300 000 iterazioni) dalla tua password e da un salt per utente
 4. il server salva solo `nonce` + ciphertext: leggere `server/data/server.db` non dà nulla di utilizzabile, e l'app decifra gli account quando fai l'accesso

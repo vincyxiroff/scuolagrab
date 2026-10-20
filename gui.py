@@ -47,90 +47,81 @@ settings = config.getconfig()
 # address of the scuolagrab server, used for the account and for the encrypted vault
 DEFAULTSERVER = os.environ.get("SBG_SERVER") or settings.get("app", "Server", fallback="http://84.8.252.233:8749")
 
-class AuthDialog(tk.Toplevel):
-	'''Login/registration window shown at startup, before the main window.
+class LoginPage(ttk.Frame):
+	'''Login/registration page shown inside the main window.
 
-	The same password protects the accounts saved on the server: the key is derived
-	here with vault.py and never leaves the app, the server only keeps ciphertext.
+	It is a frame and not a second window: a Toplevel created as a transient of a
+	hidden root is never mapped by some desktops (KDE/Wayland), so the app looked
+	like it did not start at all. The password also protects the accounts saved on
+	the server: the key is derived here with vault.py and never leaves the app.
 	'''
 
-	def __init__(self, app, server=DEFAULTSERVER, username=""):
-		super().__init__(app)
-		self.app = app
-		self.result = None
-		self.cancelled = False
+	def __init__(self, master, onsuccess, server=DEFAULTSERVER, username=""):
+		super().__init__(master, padding=24)
+		self.onsuccess = onsuccess
 		self.mode = "login"
 		self.busy = False
 		self.queue = queue.Queue()
+		self.polldid = None
 
-		self.title(f"{appname} — accedi o registrati")
-		self.resizable(False, False)
-		self.transient(app)
-		self.protocol("WM_DELETE_WINDOW", self.cancel)
-		self.bind("<Return>", lambda event: self.submit())
-		self.bind("<Escape>", lambda event: self.cancel())
+		self.columnconfigure(1, weight=1)
+		self.rowconfigure(8, weight=1)
 
-		frame = ttk.Frame(self, padding=16)
-		frame.pack(fill="both", expand=True)
-		frame.columnconfigure(1, weight=1)
+		ttk.Label(self, text=appname, font=("TkDefaultFont", 20, "bold")).grid(row=0, column=0, sticky="w")
+		ttk.Label(self, text="by vincyxiroff", foreground="#666").grid(row=0, column=1, sticky="e")
+		self.hint = ttk.Label(self, text="Accedi con il tuo account scuolagrab, oppure creane uno.", foreground="#666", wraplength=470, justify="left")
+		self.hint.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 14))
 
-		ttk.Label(frame, text=appname, font=("TkDefaultFont", 18, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
-		ttk.Label(frame, text="by vincyxiroff", foreground="#666").grid(row=0, column=2, sticky="e")
-		self.hint = ttk.Label(frame, text="Accedi con il tuo account scuolagrab, oppure creane uno.", foreground="#666", wraplength=420)
-		self.hint.grid(row=1, column=0, columnspan=3, sticky="w", pady=(2, 12))
-
-		ttk.Label(frame, text="Server").grid(row=2, column=0, sticky="w", padx=(0, 8))
-		self.server = ttk.Entry(frame, width=44)
+		ttk.Label(self, text="Server").grid(row=2, column=0, sticky="w", padx=(0, 10), pady=3)
+		self.server = ttk.Entry(self, width=44)
 		self.server.insert(0, server)
-		self.server.grid(row=2, column=1, columnspan=2, sticky="we", pady=3)
+		self.server.grid(row=2, column=1, sticky="we", pady=3)
 
-		ttk.Label(frame, text="Username").grid(row=3, column=0, sticky="w", padx=(0, 8))
-		self.username = ttk.Entry(frame, width=44)
+		ttk.Label(self, text="Username").grid(row=3, column=0, sticky="w", padx=(0, 10), pady=3)
+		self.username = ttk.Entry(self, width=44)
 		self.username.insert(0, username)
-		self.username.grid(row=3, column=1, columnspan=2, sticky="we", pady=3)
+		self.username.grid(row=3, column=1, sticky="we", pady=3)
 
-		ttk.Label(frame, text="Password").grid(row=4, column=0, sticky="w", padx=(0, 8))
-		self.password = ttk.Entry(frame, width=44, show="*")
-		self.password.grid(row=4, column=1, columnspan=2, sticky="we", pady=3)
+		ttk.Label(self, text="Password").grid(row=4, column=0, sticky="w", padx=(0, 10), pady=3)
+		self.password = ttk.Entry(self, width=44, show="*")
+		self.password.grid(row=4, column=1, sticky="we", pady=3)
 
-		self.confirmlabel = ttk.Label(frame, text="Ripeti password")
-		self.confirmlabel.grid(row=5, column=0, sticky="w", padx=(0, 8))
-		self.confirm = ttk.Entry(frame, width=44, show="*")
-		self.confirm.grid(row=5, column=1, columnspan=2, sticky="we", pady=3)
+		self.confirmlabel = ttk.Label(self, text="Ripeti password")
+		self.confirmlabel.grid(row=5, column=0, sticky="w", padx=(0, 10), pady=3)
+		self.confirm = ttk.Entry(self, width=44, show="*")
+		self.confirm.grid(row=5, column=1, sticky="we", pady=3)
 		self.confirmlabel.grid_remove()
 		self.confirm.grid_remove()
 
-		self.status = ttk.Label(frame, text="", foreground="#666", wraplength=440)
-		self.status.grid(row=6, column=0, columnspan=3, sticky="w", pady=(8, 8))
+		self.status = ttk.Label(self, text="", foreground="#666", wraplength=470, justify="left")
+		self.status.grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 10))
 
-		buttons = ttk.Frame(frame)
-		buttons.grid(row=7, column=0, columnspan=3, sticky="we")
+		buttons = ttk.Frame(self)
+		buttons.grid(row=7, column=0, columnspan=2, sticky="we")
 		self.submitbutton = ttk.Button(buttons, text="Accedi", command=self.submit)
 		self.submitbutton.pack(side="left")
 		self.switchbutton = ttk.Button(buttons, text="Crea un account", command=self.switch)
 		self.switchbutton.pack(side="left", padx=8)
-		ttk.Button(buttons, text="Esci", command=self.cancel).pack(side="right")
 
-		self.update_idletasks()
-		self.center(app)
-		self.grab_set()
+		ttk.Label(self, text="Gli account delle piattaforme vengono salvati sul server cifrati con questa password.", foreground="#888", wraplength=470, justify="left").grid(row=8, column=0, columnspan=2, sticky="sw", pady=(16, 0))
+
+		for widget in (self.server, self.username, self.password, self.confirm):
+			widget.bind("<Return>", self.onsubmit)
+
+		self.polldid = self.after(80, self.poll)
 		(self.password if username else self.username).focus_set()
-		self.polldid = self.after(60, self.poll)
 
-	def center(self, parent):
-		try:
-			x = parent.winfo_rootx() + max((parent.winfo_width() - self.winfo_width()) // 2, 0)
-			y = parent.winfo_rooty() + max((parent.winfo_height() - self.winfo_height()) // 2, 0)
-			self.geometry(f"+{x}+{y}")
-		except Exception:
-			pass
+	def onsubmit(self, event=None):
+		self.submit()
+		return "break"
 
 	def switch(self):
 		if self.busy:
 			return
 		self.mode = "register" if self.mode == "login" else "login"
+		root = self.winfo_toplevel()
 		if self.mode == "register":
-			self.title(f"{appname} — registrazione")
+			root.title(f"{appname} — registrazione")
 			self.submitbutton.configure(text="Registrati")
 			self.switchbutton.configure(text="Ho già un account")
 			self.hint.configure(text="Crea l'account sul server. La password protegge anche gli account delle piattaforme: se la perdi non si possono recuperare.")
@@ -138,7 +129,7 @@ class AuthDialog(tk.Toplevel):
 			self.confirm.grid()
 			self.confirm.focus_set()
 		else:
-			self.title(f"{appname} — accedi o registrati")
+			root.title(f"{appname} — accedi o registrati")
 			self.submitbutton.configure(text="Accedi")
 			self.switchbutton.configure(text="Crea un account")
 			self.hint.configure(text="Accedi con il tuo account scuolagrab, oppure creane uno.")
@@ -216,33 +207,25 @@ class AuthDialog(tk.Toplevel):
 		except tk.TclError:
 			return
 		try:
-			self.polldid = self.after(60, self.poll)
+			self.polldid = self.after(80, self.poll)
 		except tk.TclError:
 			pass
 
 	def finish(self, result):
-		self.result = result
-		self.release()
-		self.destroy()
-		self.app.onauth(result)
+		self.stop()
+		self.onsuccess(result)
 
-	def cancel(self):
-		self.cancelled = True
-		self.release()
-		self.destroy()
-
-	def release(self):
-		'''Stop the timers before destroying, otherwise tk complains about the pending poll'''
+	def stop(self):
 		try:
 			if self.polldid:
 				self.after_cancel(self.polldid)
 				self.polldid = None
 		except tk.TclError:
 			pass
-		try:
-			self.grab_release()
-		except tk.TclError:
-			pass
+
+	def destroy(self):
+		self.stop()
+		super().destroy()
 
 class App(tk.Tk):
 	def __init__(self, auth=True):
@@ -254,30 +237,39 @@ class App(tk.Tk):
 		self.books = {}
 		self.token = None
 		self.busy = False
+		self.ready = False
 		self.service = next(iter(utils.services))
 		self.userid = None
 		self.session = None
 		self.key = None
 		self.accounts = {}
-		self.build()
+		self.loginpage = None
 		self.polldid = self.after(80, self.poll)
 		if auth:
-			# nothing works without an account: ask before showing the main window
-			self.withdraw()
-			self.after(60, self.asklogin)
+			# nothing works without an account: the first page is the login form
+			self.showlogin()
 		else:
 			self.userid = self.getuser()
+			self.build()
+			self.ready = True
 			self.refreshaccount()
 
-	def asklogin(self):
-		'''Show the login/registration window and keep the app closed until it succeeds'''
-		if self.session:
-			return
-		self.withdraw()
-		dialog = AuthDialog(self, server=utils.getsetting("server", DEFAULTSERVER), username=utils.getsetting("username", ""))
-		self.wait_window(dialog)
-		if dialog.result is None:
-			self.destroy()
+	def resetpage(self):
+		'''Remove the current page (login form or main layout) before showing the other'''
+		self.ready = False
+		self.loginpage = None
+		for child in self.winfo_children():
+			child.destroy()
+
+	def showlogin(self):
+		'''The window always shows a page: a separate modal window is not mapped by every desktop'''
+		self.resetpage()
+		self.title(f"{appname} — accedi o registrati")
+		self.minsize(1, 1)
+		self.resizable(False, False)
+		self.geometry("560x500")
+		self.loginpage = LoginPage(self, self.onauth, server=utils.getsetting("server", DEFAULTSERVER), username=utils.getsetting("username", ""))
+		self.loginpage.pack(fill="both", expand=True)
 
 	def onauth(self, result):
 		self.session = result
@@ -287,9 +279,14 @@ class App(tk.Tk):
 		utils.settingset("server", result["server"])
 		# local storage of the platform tokens, keyed by the server username
 		self.userid = utils.new_login(result["username"], "", False) or utils.register(result["username"], "")
+		self.resetpage()
+		self.resizable(True, True)
+		self.minsize(860, 620)
+		self.geometry("1000x720")
 		self.title(f"{appname} — {result['username']}")
+		self.build()
+		self.ready = True
 		self.userlabel.configure(text=result["username"])
-		self.deiconify()
 		self.log(f"Accesso come {result['username']}: {len(result['accounts'])} account salvati sul server.")
 		self.log(f"I libri vengono salvati in {self.folder()}")
 		if result["failed"]:
@@ -306,21 +303,15 @@ class App(tk.Tk):
 		self.accounts[service] = {"username": username, "password": password}
 
 	def logout(self):
+		'''Back to the login page, forgetting the key and the decrypted accounts'''
 		if self.busy:
 			return
 		session = self.session
 		self.session, self.key, self.accounts = None, None, {}
 		self.token, self.books = None, {}
-		self.tree.delete(*self.tree.get_children())
-		self.email.delete(0, "end")
-		self.password.delete(0, "end")
-		self.userlabel.configure(text="")
-		self.tokenlabel.configure(text="")
-		self.setstatus("Pronto")
-		self.log("Uscito.")
 		if session:
 			threading.Thread(target=lambda: self.dologout(session), daemon=True).start()
-		self.asklogin()
+		self.showlogin()
 
 	def dologout(self, session):
 		try:
@@ -448,16 +439,22 @@ class App(tk.Tk):
 		self.tokenlabel.configure(text=text)
 
 	def log(self, message):
+		'''Messages can arrive from a thread while the login page is shown: ignore them'''
+		if not self.ready or not self.logbox.winfo_exists():
+			return
 		self.logbox.configure(state="normal")
 		self.logbox.insert("end", f"[{time.strftime('%H:%M:%S')}] {message}\n")
 		self.logbox.see("end")
 		self.logbox.configure(state="disabled")
 
 	def setstatus(self, text):
-		self.status.configure(text=text)
+		if self.ready:
+			self.status.configure(text=text)
 
 	def setbusy(self, busy):
 		self.busy = busy
+		if not self.ready:
+			return
 		state = "disabled" if busy else "normal"
 		self.loginbutton.configure(state=state)
 		self.loadbutton.configure(state=state)

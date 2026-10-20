@@ -33,6 +33,9 @@ class Client:
 			data = response.json()
 		except ValueError:
 			raise ServerError(f"invalid reply from the server (HTTP {response.status_code})") from e
+		if response.status_code == 404 and path.startswith("/api/app/"):
+			# a server that was never updated does not know the app API
+			raise ServerError("this server has no app API yet: update scuolagrab on the server")
 		if response.status_code == 401:
 			raise SessionExpired("session expired, restart the app and log in again")
 		if response.status_code >= 400:
