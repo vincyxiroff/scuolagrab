@@ -85,7 +85,8 @@ Server web autonomo, senza framework aggiuntivi (solo stdlib: `ThreadingHTTPServ
 - **Download**: job in thread con avanzamento per libro (percentuale + messaggio), più libri in coda, salvataggio in `files/<servizio>/`, riga in tabella `books` e PDF scaricabile con nome leggibile. I job in corso vivono in memoria (persistono i PDF e lo storico, non il job).
 - **UI** (`server/static/`): login/registrazione, scelta servizio, stato login, form credenziali piattaforma, tabella libri con checkbox, "Scarica selezionati"/"Scarica tutti", barre di progresso live e sezione "I miei download".
 - **Avvio**: default `84.8.252.233:8749` (`--host`, `--port`, o `SBG_HOST`/`SBG_PORT`); porta 8749 verificata libera su questa macchina. Se l'IP non è locale il bind fallisce con un messaggio che suggerisce `--host 0.0.0.0`.
-- **Sicurezza minima**: isolamento per utente (libri, token, job), niente path traversal su `/static/`, body limitato a 1 MB, messaggi di errore senza stack trace. HTTP in chiaro: da mettere dietro reverse proxy TLS.
+- **Sicurezza minima**: isolamento per utente (libri, token, job), niente path traversal su `/static/`, body limitato a 1 MB, messaggi di errore senza stack trace. Il server è pensato per HTTP in chiaro (l'utente non vuole HTTPS): resta disponibile `SBG_SECURE=1` per il flag `Secure` sul cookie se un giorno lo mette dietro TLS, ma non è più documentato nel README.
+- **`install.sh`**: installer guidato per Debian/Ubuntu. Chiede cartella (default `/opt/scuolagrab`), indirizzo (default `0.0.0.0`) e porta (default `8749`), installa i pacchetti di sistema, crea l'utente `scuolagrab`, copia il progetto, crea il venv, installa requirements + Chromium (`install-deps` come root), scrive e avvia l'unit systemd, apre la porta in ufw se attivo. Opzioni `--dry-run`, `--no-service`, `--help`; validazione di porta e cartella (assoluta, fuori dal source tree) e idempotenza su reinstallazione. Verificato con `bash -n` e `--dry-run` (con stub di `apt-get` su una macchina non Debian): exit 0, piano corretto, nessuna modifica al sistema.
 
 ### 4d. Dettagli server
 
@@ -94,7 +95,7 @@ Server web autonomo, senza framework aggiuntivi (solo stdlib: `ThreadingHTTPServ
 
 ### 4. Documentazione
 
-- `README.md`: URL del repo corretto, nota sul downloader Mondadori e su `Downloader`/`ClientVersion`, riga Sanoma My Place, nota sul login playwright e su `playwright install`.
+- `README.md`: bilingue (inglese + italiano) con indice, keyword, setup client e server, `install.sh`, configurazione, troubleshooting; rimosse le sezioni nginx/HTTPS su richiesta. 51 heading, 48 link interni, 0 rotti.
 - `config-default.ini`: nuove opzioni `[hbs]` e `[plc]` con commenti.
 - `config.ini` locale rigenerato dal nuovo default.
 

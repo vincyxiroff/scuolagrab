@@ -27,10 +27,10 @@ Scarica i tuoi libri di testo digitali in PDF, con indice e page label ricostrui
   - [Local data](#local-data)
 - [Server setup](#server-setup)
   - [Server requirements](#server-requirements)
+  - [Automatic install script](#automatic-install-script)
   - [Install](#install)
   - [First start](#first-start)
   - [systemd service](#systemd-service)
-  - [HTTPS with nginx](#https-with-nginx)
   - [Backups and security](#backups-and-security)
   - [Update](#update)
 - [Browser client](#browser-client)
@@ -150,6 +150,18 @@ Platform tokens are stored in plain text in `db.json`: the file is gitignored, d
 - 1 vCPU, 1 GB RAM, ~2 GB disk (Chromium + PDFs)
 - port **8749** (configurable with `--port`)
 
+### Automatic install script
+
+`install.sh` does the whole setup on Debian/Ubuntu: system packages, the `scuolagrab` user, the project in `/opt/scuolagrab`, the virtualenv, Chromium, the systemd service and (optionally) the firewall rule. It asks for folder, address and port, and it is safe to run again to repair an installation.
+
+```bash
+cd ~
+git clone https://github.com/vincyxiroff/scuolagrab.git
+sudo bash scuolagrab/install.sh
+```
+
+Then open `http://SERVER-IP:8749`. If you prefer to do it by hand, follow the steps below.
+
 ### Install
 
 ```bash
@@ -195,8 +207,6 @@ User=scuolagrab
 WorkingDirectory=/opt/scuolagrab
 Environment=SBG_HOST=0.0.0.0
 Environment=SBG_PORT=8749
-# enable only when the site is served over HTTPS:
-# Environment=SBG_SECURE=1
 ExecStart=/opt/scuolagrab/.venv/bin/python server/app.py
 Restart=always
 RestartSec=3
@@ -212,38 +222,7 @@ sudo systemctl status scuolagrab
 sudo journalctl -u scuolagrab -f      # logs
 ```
 
-Firewall: `sudo ufw allow 8749/tcp` if you connect directly to the port. Behind a reverse proxy, bind to `127.0.0.1` and open only 80/443.
-
-### HTTPS with nginx
-
-```nginx
-server {
-    listen 80;
-    server_name libri.example.com;
-    client_max_body_size 2m;
-
-    location / {
-        proxy_pass http://127.0.0.1:8749;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        # the Sanoma login can take one or two minutes
-        proxy_read_timeout 600s;
-    }
-}
-```
-
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d libri.example.com
-```
-
-With HTTPS enabled add `Environment=SBG_SECURE=1` to the service (cookie with the `Secure` flag) and restart. With Caddy:
-
-```
-libri.example.com {
-    reverse_proxy 127.0.0.1:8749
-}
-```
+Firewall: `sudo ufw allow 8749/tcp` so the page is reachable from other machines.
 
 ### Backups and security
 
@@ -274,7 +253,7 @@ sudo systemctl restart scuolagrab
 4. **Carica libreria**, select one or more books and press **Scarica selezionati** (or **Scarica tutti**).
 5. Follow the progress in "Download in corso"; when it is done the PDF appears in "I miei download".
 
-Each server user has their own logins and books, isolated from the others. The browser never stores platform passwords or tokens. The server is meant to run behind a TLS reverse proxy: do not expose it in plain HTTP on the internet.
+Each server user has their own logins and books, isolated from the others. The browser never stores platform passwords or tokens. The server speaks plain HTTP: use it on a trusted network (home LAN, VPN) or protect it with the firewall, because without TLS anyone on the path could read the traffic.
 
 ## Configuration
 
@@ -311,6 +290,7 @@ server/app.py        web server (HTTP + API + jobs)
 server/db.py         server SQLite layer
 server/static/       web interface
 config-default.ini   default options
+install.sh           guided server installer
 ```
 
 ## Service notes
@@ -358,10 +338,10 @@ Provided "as is", without warranty. Use it only for books you are legitimately a
   - [Dati locali](#dati-locali)
 - [Setup del server](#setup-del-server)
   - [Requisiti del server](#requisiti-del-server)
+  - [Script di installazione](#script-di-installazione)
   - [Installazione](#installazione)
   - [Primo avvio del server](#primo-avvio-del-server)
   - [Servizio systemd](#servizio-systemd)
-  - [HTTPS con nginx](#https-con-nginx)
   - [Backup e sicurezza](#backup-e-sicurezza)
   - [Aggiornamento](#aggiornamento)
 - [Client via browser](#client-via-browser)
@@ -481,6 +461,18 @@ La cartella `server/` contiene una versione web autonoma, senza framework aggiun
 - 1 vCPU, 1 GB di RAM, ~2 GB di disco (Chromium + i PDF)
 - porta **8749** (modificabile con `--port`)
 
+### Script di installazione
+
+`install.sh` fa tutto il setup su Debian/Ubuntu: pacchetti di sistema, utente `scuolagrab`, progetto in `/opt/scuolagrab`, virtualenv, Chromium, servizio systemd e (se vuoi) regola del firewall. Chiede cartella, indirizzo e porta, e si può rieseguire per riparare un'installazione.
+
+```bash
+cd ~
+git clone https://github.com/vincyxiroff/scuolagrab.git
+sudo bash scuolagrab/install.sh
+```
+
+Poi apri `http://IP-DEL-SERVER:8749`. Se preferisci farlo a mano, segui i passaggi qui sotto.
+
 ### Installazione
 
 ```bash
@@ -526,8 +518,6 @@ User=scuolagrab
 WorkingDirectory=/opt/scuolagrab
 Environment=SBG_HOST=0.0.0.0
 Environment=SBG_PORT=8749
-# attiva solo quando il sito è raggiungibile in HTTPS:
-# Environment=SBG_SECURE=1
 ExecStart=/opt/scuolagrab/.venv/bin/python server/app.py
 Restart=always
 RestartSec=3
@@ -543,38 +533,7 @@ sudo systemctl status scuolagrab
 sudo journalctl -u scuolagrab -f      # log
 ```
 
-Firewall: `sudo ufw allow 8749/tcp` se accedi direttamente alla porta. Dietro un reverse proxy, ascolta solo su `127.0.0.1` e apri solo 80/443.
-
-### HTTPS con nginx
-
-```nginx
-server {
-    listen 80;
-    server_name libri.example.com;
-    client_max_body_size 2m;
-
-    location / {
-        proxy_pass http://127.0.0.1:8749;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        # il login su Sanoma può richiedere uno o due minuti
-        proxy_read_timeout 600s;
-    }
-}
-```
-
-```bash
-sudo apt install -y nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d libri.example.com
-```
-
-Con HTTPS attivo aggiungi `Environment=SBG_SECURE=1` al servizio (cookie con flag `Secure`) e riavvia. Con Caddy:
-
-```
-libri.example.com {
-    reverse_proxy 127.0.0.1:8749
-}
-```
+Firewall: `sudo ufw allow 8749/tcp` così la pagina è raggiungibile dalle altre macchine.
 
 ### Backup e sicurezza
 
@@ -605,7 +564,7 @@ sudo systemctl restart scuolagrab
 4. **Carica libreria**, seleziona uno o più libri e premi **Scarica selezionati** (o **Scarica tutti**).
 5. Segui il progresso nella scheda "Download in corso"; a fine lavoro il PDF è in "I miei download".
 
-Ogni utente del server ha i suoi login e i suoi libri, isolati dagli altri. Il browser non salva mai password o token delle piattaforme. Il server è pensato per girare dietro un reverse proxy TLS: non esporlo in chiaro su internet.
+Ogni utente del server ha i suoi login e i suoi libri, isolati dagli altri. Il browser non salva mai password o token delle piattaforme. Il server parla HTTP in chiaro: usalo su una rete fidata (LAN di casa, VPN) o proteggilo col firewall, perché senza TLS chi sta sulla rete può leggere il traffico.
 
 ## Configurazione
 
@@ -642,6 +601,7 @@ server/app.py        server web (HTTP + API + job)
 server/db.py         livello SQLite del server
 server/static/       interfaccia web
 config-default.ini   opzioni predefinite
+install.sh           installer guidato del server
 ```
 
 ## Note per servizio
