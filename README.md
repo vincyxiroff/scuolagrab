@@ -123,24 +123,35 @@ python3 -m pip install -r requirements.txt
 python3 -m playwright install chromium
 ```
 
-On the first launch a local scuolagrab user is created (username and password stay on your PC), then:
+The CLI creates a local scuolagrab user on the first launch (username and password stay on your PC); the GUI uses the server account described below. With the CLI:
 
 1. `d` — choose the service, enter the platform email and password once.
 2. Pick the books: `0`, `0,3`, `2-5`, `all`/`a`; empty input cancels.
 3. PDFs are saved in `files/<service>/<id>.pdf`.
 
-The GUI does the same with buttons: choose the service, **Accedi**, **Carica libreria**, select the books and press **Scarica selezionati** (or **Scarica tutti**).
+The GUI does the same with buttons, after the login window described below: choose the service, **Accedi**, **Carica libreria**, select the books and press **Scarica selezionati** (or **Scarica tutti**). The folder where the PDFs go is shown above the buttons ("Salvataggio in") and **Apri cartella** opens it; if the file manager cannot be opened, the same window shows the path.
+
+### Accounts and encryption
+
+`gui.py` does not start without an account, because the account is where the platform logins are kept:
+
+1. the login window asks for the server address, username and password; **Crea un account** registers a new one on the server
+2. the account is the same one used by the web version (`http://SERVER-IP:8749`), so one registration works everywhere
+3. every platform login made in the GUI (bSmart, Mondadori, Sanoma) is encrypted **inside the app** with AES-256-GCM, using a key derived with PBKDF2-SHA256 (300 000 rounds) from your password and a per-user salt
+4. the server stores only `nonce` + ciphertext: reading `server/data/server.db` gives nothing usable, and the app decrypts the accounts when you log in
+
+The key never leaves the app, so the server cannot read the saved accounts. The other side of the coin: lose the password and the saved logins are unrecoverable (the app only shows "account non leggibile"). The login password itself travels in the request body, like any login form: over plain HTTP it can be read on the path (see the note in the server section).
 
 ### Local data
 
 ```
 files/<service>/<id>.pdf        downloaded books
 files/<service>/cover-<id>.png  covers (with Cover = yes)
-db.json                         local users, tokens and history (do not commit)
+db.json                         last user/server used, platform tokens, history (do not commit)
 config.ini                      local configuration (created from config-default.ini)
 ```
 
-Platform tokens are stored in plain text in `db.json`: the file is gitignored, do not share it.
+Platform tokens are stored in plain text in `db.json`: the file is gitignored, do not share it. The platform accounts (email + password) are not in `db.json`: they live encrypted on the server, see above.
 
 ### Prebuilt apps
 
@@ -220,6 +231,21 @@ sudo -u scuolagrab .venv/bin/python server/app.py --host 0.0.0.0 --port 8749
 
 Then open `http://SERVER-IP:8749`: register a user, choose the service, save the platform login, load the library and download the books. PDFs stay on the server and are downloaded from the link in the page.
 
+### API used by the app
+
+The GUI talks to the same server with a small JSON API and a bearer token:
+
+| method | path | meaning |
+| ------ | ---- | ------- |
+| `POST` | `/api/app/register` | create an account, returns session token, user id and vault salt |
+| `POST` | `/api/app/login` | log in, same reply plus the encrypted accounts |
+| `POST` | `/api/app/logout` | invalidate the token |
+| `GET` | `/api/app/vault` | encrypted accounts of the user |
+| `PUT` | `/api/app/vault/<service>` | save an encrypted account (`nonce` + `data`) |
+| `DELETE` | `/api/app/vault/<service>` | forget a service |
+
+The server only stores `nonce` and ciphertext in the `vault` table, so a copy of the database is not enough to read the accounts. The password shown in the login window is still sent to the server to authenticate, exactly like the web form: over plain HTTP anyone on the path can read it. Use a trusted network, a VPN or HTTPS in front of it if that matters.
+
 > The default address in the code is `84.8.252.233:8749`. On any other machine always pass the right one: `--host 0.0.0.0` (all interfaces) or `SBG_HOST`/`SBG_PORT` environment variables. If the IP does not belong to the machine the program says so and exits.
 
 ### systemd service
@@ -283,7 +309,7 @@ sudo systemctl restart scuolagrab
 4. **Carica libreria**, select one or more books and press **Scarica selezionati** (or **Scarica tutti**).
 5. Follow the progress in "Download in corso"; when it is done the PDF appears in "I miei download".
 
-Each server user has their own logins and books, isolated from the others. The browser never stores platform passwords or tokens. The server speaks plain HTTP: use it on a trusted network (home LAN, VPN) or protect it with the firewall, because without TLS anyone on the path could read the traffic.
+Each server user has their own logins and books, isolated from the others. It is the same account the desktop app uses, so you can register here and log in from the app (and the other way round). The browser never stores platform passwords or tokens. The server speaks plain HTTP: use it on a trusted network (home LAN, VPN) or protect it with the firewall, because without TLS anyone on the path could read the traffic.
 
 ## Configuration
 
@@ -297,6 +323,7 @@ Each server user has their own logins and books, isolated from the others. The b
 | | `Author` | author in the PDF metadata (empty = no author) |
 | `[pdfgrabber]` | `AskPassword` | ask for the local user password at every start |
 | | `ShowBanner` | show the CLI banner |
+| `[app]` | `Server` | server used by the GUI for login and the encrypted accounts (default `http://84.8.252.233:8749`, override with `SBG_SERVER`) |
 | `[hbs]` | `Downloader` | `chapters` (default, the only one still served) or `documentengine` with automatic fallback |
 | | `ClientVersion` | client version sent to the Mondadori viewer |
 | `[plc]` | `Workers` | pages downloaded in parallel (default 6) |
@@ -309,7 +336,9 @@ The `[pdfgrabber]` section keeps its historical name for compatibility with exis
 
 ```
 main.py              CLI (rich)
-gui.py               GUI (Tkinter)
+gui.py               GUI (Tkinter) with the login window
+apiclient.py         server API client (login, encrypted accounts)
+vault.py             AES-GCM / PBKDF2 used to encrypt the accounts
 dependencies.py      dependency check and installer at startup
 utils.py             services loading, downloads, metadata, local database
 lib.py               page label helpers
@@ -470,24 +499,35 @@ python3 -m pip install -r requirements.txt
 python3 -m playwright install chromium
 ```
 
-Al primo utilizzo viene creato un utente locale di scuolagrab (username e password restano sul tuo PC), poi:
+La CLI crea un utente locale di scuolagrab al primo utilizzo (username e password restano sul tuo PC); la GUI usa l'account del server descritto qui sotto. Con la CLI:
 
 1. `d` — scegli il servizio, inserisci email e password della piattaforma una sola volta.
 2. Scegli i libri: `0`, `0,3`, `2-5`, `all`/`a`, invio vuoto per annullare.
 3. I PDF finiscono in `files/<servizio>/<id>.pdf`.
 
-La GUI fa le stesse cose con i pulsanti: scegli il servizio, **Accedi**, **Carica libreria**, seleziona i libri e **Scarica selezionati** (o **Scarica tutti**).
+La GUI fa le stesse cose con i pulsanti, dopo la finestra di accesso descritta qui sotto: scegli il servizio, **Accedi**, **Carica libreria**, seleziona i libri e **Scarica selezionati** (o **Scarica tutti**). La cartella in cui finiscono i PDF è scritta sopra i pulsanti ("Salvataggio in") e **Apri cartella** la apre; se il file manager non si apre, la finestra mostra comunque il percorso.
+
+### Account e cifratura
+
+`gui.py` non parte senza un account, perché è lì che vengono tenuti i login delle piattaforme:
+
+1. la finestra di accesso chiede indirizzo del server, username e password; **Crea un account** ne registra uno nuovo sul server
+2. l'account è lo stesso della versione web (`http://IP-DEL-SERVER:8749`), quindi una registrazione vale ovunque
+3. ogni login di piattaforma fatto nella GUI (bSmart, Mondadori, Sanoma) viene cifrato **dentro l'app** con AES-256-GCM, con una chiave derivata con PBKDF2-SHA256 (300 000 iterazioni) dalla tua password e da un salt per utente
+4. il server salva solo `nonce` + ciphertext: leggere `server/data/server.db` non dà nulla di utilizzabile, e l'app decifra gli account quando fai l'accesso
+
+La chiave non esce mai dall'app, quindi il server non può leggere gli account salvati. Il rovescio della medaglia: se perdi la password i login salvati non si recuperano (l'app scrive "account non leggibile"). La password di accesso viaggia comunque nel corpo della richiesta, come in qualsiasi form di login: su HTTP in chiaro chi sta sulla rete può leggerla (vedi la nota nella sezione del server).
 
 ### Dati locali
 
 ```
 files/<servizio>/<id>.pdf        libri scaricati
 files/<servizio>/cover-<id>.png  copertine (con Cover = yes)
-db.json                          utenti locali, token e storico (non committare)
+db.json                          ultimo utente/server usato, token e storico (non committare)
 config.ini                       configurazione locale (creata da config-default.ini)
 ```
 
-I token delle piattaforme sono salvati in chiaro in `db.json`: quel file è gitignored, non condividerlo.
+I token delle piattaforme sono salvati in chiaro in `db.json`: quel file è gitignored, non condividerlo. Gli account delle piattaforme (email + password) non stanno in `db.json`: sono cifrati sul server, vedi sopra.
 
 ### App già pronte
 
@@ -567,6 +607,21 @@ sudo -u scuolagrab .venv/bin/python server/app.py --host 0.0.0.0 --port 8749
 
 Poi apri `http://IP-DEL-SERVER:8749`: registra un utente, scegli il servizio, salva il login della piattaforma, carica la libreria e scarica i libri. I PDF restano sul server e si scaricano dal link nella pagina.
 
+### API usata dall'app
+
+La GUI parla con lo stesso server tramite una piccola API JSON con token bearer:
+
+| metodo | percorso | significato |
+| ------ | -------- | ----------- |
+| `POST` | `/api/app/register` | crea un account, restituisce token di sessione, id utente e salt del vault |
+| `POST` | `/api/app/login` | accesso, stessa risposta più gli account cifrati |
+| `POST` | `/api/app/logout` | invalida il token |
+| `GET` | `/api/app/vault` | account cifrati dell'utente |
+| `PUT` | `/api/app/vault/<servizio>` | salva un account cifrato (`nonce` + `data`) |
+| `DELETE` | `/api/app/vault/<servizio>` | dimentica un servizio |
+
+Il server salva solo `nonce` e ciphertext nella tabella `vault`, quindi una copia del database non basta per leggere gli account. La password della finestra di accesso viene comunque inviata al server per autenticarsi, esattamente come nel form web: su HTTP in chiaro chi sta sulla rete può leggerla. Usa una rete fidata, una VPN o metti HTTPS davanti al server se la cosa conta.
+
 > Il valore predefinito nel codice è `84.8.252.233:8749`. Su un altro server indica sempre l'indirizzo giusto: `--host 0.0.0.0` (tutte le interfacce) oppure le variabili d'ambiente `SBG_HOST`/`SBG_PORT`. Se l'IP non appartiene alla macchina il programma lo dice e si ferma.
 
 ### Servizio systemd
@@ -630,7 +685,7 @@ sudo systemctl restart scuolagrab
 4. **Carica libreria**, seleziona uno o più libri e premi **Scarica selezionati** (o **Scarica tutti**).
 5. Segui il progresso nella scheda "Download in corso"; a fine lavoro il PDF è in "I miei download".
 
-Ogni utente del server ha i suoi login e i suoi libri, isolati dagli altri. Il browser non salva mai password o token delle piattaforme. Il server parla HTTP in chiaro: usalo su una rete fidata (LAN di casa, VPN) o proteggilo col firewall, perché senza TLS chi sta sulla rete può leggere il traffico.
+Ogni utente del server ha i suoi login e i suoi libri, isolati dagli altri. È lo stesso account che usa l'app desktop, quindi puoi registrarti qui e accedere dall'app (e viceversa). Il browser non salva mai password o token delle piattaforme. Il server parla HTTP in chiaro: usalo su una rete fidata (LAN di casa, VPN) o proteggilo col firewall, perché senza TLS chi sta sulla rete può leggere il traffico.
 
 ## Configurazione
 
@@ -644,6 +699,7 @@ Ogni utente del server ha i suoi login e i suoi libri, isolati dagli altri. Il b
 | | `Author` | autore nei metadati del PDF (vuoto = nessun autore) |
 | `[pdfgrabber]` | `AskPassword` | chiede la password dell'utente locale a ogni avvio |
 | | `ShowBanner` | banner all'avvio della CLI |
+| `[app]` | `Server` | server usato dalla GUI per login e account cifrati (default `http://84.8.252.233:8749`, si può forzare con `SBG_SERVER`) |
 | `[hbs]` | `Downloader` | `chapters` (default, l'unico ancora servito) o `documentengine` con fallback automatico |
 | | `ClientVersion` | versione client inviata al viewer Mondadori |
 | `[plc]` | `Workers` | pagine scaricate in parallelo (default 6) |
@@ -656,7 +712,9 @@ La sezione `[pdfgrabber]` mantiene il nome storico per compatibilità con le con
 
 ```
 main.py              CLI (rich)
-gui.py               GUI (Tkinter)
+gui.py               GUI (Tkinter) con la finestra di accesso
+apiclient.py         client dell'API del server (login, account cifrati)
+vault.py             AES-GCM / PBKDF2 per cifrare gli account
 dependencies.py      controllo/installazione dipendenze all'avvio
 utils.py             caricamento servizi, download, metadati, database locale
 lib.py               helper per le page label

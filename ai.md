@@ -104,6 +104,20 @@ Server web autonomo, senza framework aggiuntivi (solo stdlib: `ThreadingHTTPServ
 - **macOS senza Chromium nel bundle**: PyInstaller fallisce il codesign dell'`.app` annidata di Chrome (`bundle format unrecognized`). Quindi `build.py` su darwin non include i browser (solo con `--browsers`), e `paths.browsersdir()` in frozen usa `datadir()/browsers` (scrivibile) quando il bundle non ne ha: l'app li scarica al primo avvio con il proprio driver Playwright. Su Linux/Windows restano inclusi.
 - **Estensioni per il bundle**: `gui.py` accetta `--selftest` (costruisce la finestra e stampa titolo/servizi) e `--checkbrowser` (lancia Chromium dal driver incluso) e installa un `sys.excepthook` che scrive `error.log` nella cartella dati e mostra un messagebox (sull'exe non c'è terminale). `dependencies.ensure(interactive=False)` non chiede né scarica nulla nei self test; `rich` è controllato solo fuori dal bundle (la GUI non lo usa).
 
+### 4f. Account dell'app e vault cifrato
+
+Requisito: all'apertura l'app deve chiedere login/registrazione sul sito, e gli account delle piattaforme salvati sul server devono essere cifrati e decifrati dall'app.
+
+- **`vault.py`** (nuovo): chiave = PBKDF2-HMAC-SHA256(password, salt dell'utente, 300 000 iterazioni, 32 byte); payload = `{"username", "password"}` in JSON cifrato con **AES-256-GCM** (nonce 12 byte, tag 16), AAD `scuolagrab-vault|<userid>|<service>` così un blob non si può spostare su un altro utente o servizio. Blob scambiato col server = `{nonce, data}` in base64. `VaultError` per salt non valido, blob rovinato, password sbagliata.
+- **`apiclient.py`** (nuovo): client `requests` con timeout 20 s; `ServerError` (messaggio dal server o "server not reachable"), `SessionExpired` su 401; metodi `register`, `login`, `logout`, `saveaccount`, `deleteaccount`.
+- **Server, schema**: `users.vault_salt` (migrazione `ALTER TABLE` per i DB esistenti) creata al primo accesso dall'app con `db.ensurevaultsalt`; nuova tabella `vault (user_id, service, nonce, data, updated)` con PK `(user_id, service)`.
+- **Server, API app** (stessa tabella `users`, quindi lo stesso account vale per sito e app): `POST /api/app/register`, `POST /api/app/login` (risposta: `username`, `userid`, `salt`, `token`, `vault`), `POST /api/app/logout`, `GET /api/app/vault`, `PUT /api/app/vault/<service>` (max 64 char di nonce, 16 KB di dati), `DELETE /api/app/vault/<service>`. Autenticazione bearer: `session()` accetta `Authorization: Bearer <token>` oltre al cookie. Il server non riceve mai la chiave: salva solo `nonce` + ciphertext.
+- **GUI**: `AuthDialog` (Toplevel modale) mostrata prima della finestra principale (`withdraw` finché l'accesso non riesce); campi server (default `[app] Server` o `SBG_SERVER`), username (ricordato in `db.json` tabella `settings`), password, "Ripeti password" solo in registrazione; `Accedi` / `Crea un account` / `Esci`; errori del server mostrati nella finestra (password errata non chiude nulla). Chiudere la finestra di accesso chiude l'app.
+- **GUI, dati**: al login la chiave viene derivata in memoria e i blob ricevuti vengono decifrati in un thread; `self.accounts` contiene gli account in chiaro solo in RAM. `refreshaccount()` precompila email/password del servizio selezionato e mostra "Account salvato sul server ✓". Dopo un login di piattaforma riuscito `saveaccount()` cifra e invia al server (token locale in `db.json` invariato) e un errore di rete non blocca il download.
+- **GUI, account locale**: l'id usato per i token locali ora è l'utente del server (`utils.new_login(username, "", False)`), non più l'utente fittizio "locale"; `--selftest` usa `App(auth=False)` e resta senza server.
+- **Bug trovati e corretti durante i test**: `poll()` si rischedulava dopo la distruzione della finestra ("invalid command name ...poll") → id salvato e `after_cancel` in `release()`/`App.destroy()`; "Apri cartella" non faceva nulla quando `xdg-open` usciva con errore → `subprocess.run` controllato e messagebox col percorso; percorso relativo `Path("files")` → `paths.datadir()/files/<servizio>` assoluto.
+- **GUI, posizione dei download**: entry readonly "Salvataggio in" con il percorso assoluto della cartella del servizio, aggiornata al cambio servizio; log con percorso assoluto per ogni PDF salvato; "Apri cartella" spostato accanto al percorso.
+
 ### 4. Documentazione
 
 - `README.md`: bilingue (inglese + italiano) con indice, keyword, setup client e server, `install.sh`, configurazione, troubleshooting; rimosse le sezioni nginx/HTTPS su richiesta. 51 heading, 48 link interni, 0 rotti.
@@ -145,6 +159,7 @@ Server web autonomo, senza framework aggiuntivi (solo stdlib: `ThreadingHTTPServ
 - **requirements.txt non pinnato**: PyMuPDF 2.0 ha cambiato API, un range di versione eviterebbe sorprese future.
 - TODO storici del README ancora aperti: utente anonimo, "perfect token checks", warning non critici per TOC/page label.
 - I token sono salvati in chiaro in `db.json` (gitignored) e in `server/data/server.db` (gitignored): non committarli e proteggere i file.
+- **Vault cifrato**: il server vede la password al login (come ogni form) ma non può decifrare gli account salvati; se l'utente dimentica la password i login salvati sono persi (non c'è cambio password né reset). Non c'è ancora un pulsante per rimuovere un account dalla GUI, anche se l'API `DELETE /api/app/vault/<service>` esiste.
 - **Limiti del server**: HTTP in chiaro (serve un reverse proxy TLS), niente CSRF token (mitigato da `SameSite=Lax` e API JSON), job in memoria (si perdono al riavvio), nessun limite di download simultanei per utente, un solo login per servizio e per utente.
 
 ## Comandi utili

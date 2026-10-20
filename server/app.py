@@ -168,6 +168,10 @@ class Handler(BaseHTTPRequestHandler):
 			return {}
 
 	def session(self):
+		'''Browser: httpOnly cookie. App: Authorization: Bearer <session token>'''
+		header = self.headers.get("Authorization", "")
+		if header.lower().startswith("bearer "):
+			return db.getsession(header[7:].strip())
 		cookies = SimpleCookie(self.headers.get("Cookie", ""))
 		morsel = cookies.get(COOKIE)
 		return db.getsession(morsel.value if morsel else None)
@@ -195,6 +199,11 @@ class Handler(BaseHTTPRequestHandler):
 				return self.sendjson({"username": user["username"] if user else None})
 			if path == "/api/services":
 				return self.sendjson({"services": SERVICES})
+			if path == "/api/app/vault":
+				user = self.require()
+				if not user:
+					return
+				return self.sendjson({"items": db.vaultentries(user["id"])})
 			if path == "/api/tokens":
 				user = self.require()
 				if not user:
@@ -265,6 +274,12 @@ class Handler(BaseHTTPRequestHandler):
 				return self.login()
 			if path == "/api/logout":
 				return self.logout()
+			if path == "/api/app/register":
+				return self.appregister()
+			if path == "/api/app/login":
+				return self.applogin()
+			if path == "/api/app/logout":
+				return self.applogout()
 			if path == "/api/tokens":
 				return self.savetoken()
 			if path == "/api/downloads":
@@ -276,8 +291,29 @@ class Handler(BaseHTTPRequestHandler):
 			traceback.print_exc()
 			self.error(500, "internal error")
 
+	def do_PUT(self):
+		path = urlparse(self.path).path
+		try:
+			if path.startswith("/api/app/vault/"):
+				return self.appvaultsave(unquote(path.rsplit("/", 1)[-1]))
+			return self.error(404, "not found")
+		except (BrokenPipeError, ConnectionResetError):
+			pass
+		except Exception:
+			traceback.print_exc()
+			self.error(500, "internal error")
+
 	def do_DELETE(self):
 		path = urlparse(self.path).path
+		if path.startswith("/api/app/vault/"):
+			user = self.require()
+			if not user:
+				return
+			name = unquote(path.rsplit("/", 1)[-1])
+			if name not in SERVICES:
+				return self.error(400, "unknown service")
+			db.deletevault(user["id"], name)
+			return self.sendjson({"ok": True})
 		if path.startswith("/api/tokens/"):
 			user = self.require()
 			if not user:
@@ -295,14 +331,20 @@ class Handler(BaseHTTPRequestHandler):
 		secure = "; Secure" if SECURE else ""
 		return f"{COOKIE}={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age={maxttl}{secure}"
 
+	def credentialproblem(self, username, password):
+		if not re.fullmatch(r"[A-Za-z0-9_.-]{3,32}", username):
+			return "username: 3-32 characters (letters, digits, . _ -)"
+		if len(password) < 6:
+			return "password too short (min 6 characters)"
+		return ""
+
 	def register(self):
 		data = self.body()
 		username = str(data.get("username", "")).strip()
 		password = str(data.get("password", ""))
-		if not re.fullmatch(r"[A-Za-z0-9_.-]{3,32}", username):
-			return self.error(400, "username: 3-32 characters (letters, digits, . _ -)")
-		if len(password) < 6:
-			return self.error(400, "password too short (min 6 characters)")
+		problem = self.credentialproblem(username, password)
+		if problem:
+			return self.error(400, problem)
 		if db.finduser(username):
 			return self.error(409, "username already taken")
 		user = db.newuser(username, password)
@@ -323,6 +365,59 @@ class Handler(BaseHTTPRequestHandler):
 			morsel = SimpleCookie(self.headers.get("Cookie", "")).get(COOKIE)
 			db.deletesession(morsel.value if morsel else "")
 		self.sendjson({"ok": True}, 200, {"Set-Cookie": self.cookieheader("", 0)})
+
+	# ---------- desktop app ----------
+
+	def appsession(self, user):
+		'''Login of the app: same users table as the site, so one account works in both'''
+		return self.sendjson({
+			"username": user["username"],
+			"userid": user["id"],
+			"salt": db.ensurevaultsalt(user["id"]),
+			"token": db.createsession(user["id"]),
+			"vault": db.vaultentries(user["id"]),
+		})
+
+	def appregister(self):
+		data = self.body()
+		username = str(data.get("username", "")).strip()
+		password = str(data.get("password", ""))
+		problem = self.credentialproblem(username, password)
+		if problem:
+			return self.error(400, problem)
+		if db.finduser(username):
+			return self.error(409, "username already taken")
+		return self.appsession(db.newuser(username, password))
+
+	def applogin(self):
+		data = self.body()
+		user = db.finduser(str(data.get("username", "")).strip())
+		if not user or not db.checkpassword(user["password"], str(data.get("password", ""))):
+			return self.error(403, "wrong username or password")
+		return self.appsession(user)
+
+	def applogout(self):
+		header = self.headers.get("Authorization", "")
+		if header.lower().startswith("bearer "):
+			db.deletesession(header[7:].strip())
+		return self.sendjson({"ok": True})
+
+	def appvaultsave(self, service):
+		'''The app sends only the encrypted blob: the server cannot read the account'''
+		user = self.require()
+		if not user:
+			return
+		if service not in SERVICES:
+			return self.error(400, "unknown service")
+		data = self.body()
+		nonce = str(data.get("nonce", ""))
+		payload = str(data.get("data", ""))
+		if not nonce or not payload:
+			return self.error(400, "empty entry")
+		if len(nonce) > 64 or len(payload) > 16384:
+			return self.error(400, "entry too large")
+		db.savevault(user["id"], service, nonce, payload)
+		return self.sendjson({"ok": True, "service": service})
 
 	# ---------- platform login ----------
 

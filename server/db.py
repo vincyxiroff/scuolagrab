@@ -26,7 +26,8 @@ def init():
 				id INTEGER PRIMARY KEY AUTOINCREMENT,
 				username TEXT NOT NULL UNIQUE,
 				password TEXT NOT NULL,
-				created REAL NOT NULL
+				created REAL NOT NULL,
+				vault_salt TEXT NOT NULL DEFAULT ''
 			);
 			CREATE TABLE IF NOT EXISTS sessions (
 				token TEXT PRIMARY KEY,
@@ -52,8 +53,22 @@ def init():
 				created REAL NOT NULL,
 				UNIQUE (user_id, service, bookid)
 			);
+			-- school platform accounts saved by the app: nonce + ciphertext only,
+			-- the key is derived from the user password inside the app
+			CREATE TABLE IF NOT EXISTS vault (
+				user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+				service TEXT NOT NULL,
+				nonce TEXT NOT NULL,
+				data TEXT NOT NULL,
+				updated REAL NOT NULL,
+				PRIMARY KEY (user_id, service)
+			);
 			"""
 		)
+		# databases created before the encrypted vault have no salt column yet
+		columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+		if "vault_salt" not in columns:
+			conn.execute("ALTER TABLE users ADD COLUMN vault_salt TEXT NOT NULL DEFAULT ''")
 
 def hashpassword(password):
 	salt = secrets.token_hex(16)
@@ -121,6 +136,35 @@ def tokensinfo(userid):
 	with connect() as conn:
 		rows = conn.execute("SELECT service, updated FROM service_tokens WHERE user_id = ?", (userid,)).fetchall()
 	return {row["service"]: row["updated"] for row in rows}
+
+def ensurevaultsalt(userid):
+	'''Salt for the key derivation. Created the first time the app logs in.'''
+	with connect() as conn:
+		row = conn.execute("SELECT vault_salt FROM users WHERE id = ?", (userid,)).fetchone()
+		if not row:
+			return ""
+		if row["vault_salt"]:
+			return row["vault_salt"]
+		salt = secrets.token_hex(16)
+		conn.execute("UPDATE users SET vault_salt = ? WHERE id = ?", (salt, userid))
+		return salt
+
+def savevault(userid, service, nonce, data):
+	with connect() as conn:
+		conn.execute(
+			"INSERT INTO vault (user_id, service, nonce, data, updated) VALUES (?, ?, ?, ?, ?) ON CONFLICT (user_id, service) DO UPDATE SET nonce = excluded.nonce, data = excluded.data, updated = excluded.updated",
+			(userid, service, nonce, data, time.time()),
+		)
+
+def vaultentries(userid):
+	'''Encrypted blobs of every service, the app is the only one able to read them'''
+	with connect() as conn:
+		rows = conn.execute("SELECT service, nonce, data, updated FROM vault WHERE user_id = ?", (userid,)).fetchall()
+	return {row["service"]: {"nonce": row["nonce"], "data": row["data"], "updated": row["updated"]} for row in rows}
+
+def deletevault(userid, service):
+	with connect() as conn:
+		conn.execute("DELETE FROM vault WHERE user_id = ? AND service = ?", (userid, service))
 
 def savebook(userid, service, bookid, title, pages, path):
 	with connect() as conn:

@@ -15,6 +15,7 @@ db = TinyDB("db.json")
 usertable = db.table("users")
 tokentable = db.table("tokens")
 booktable = db.table("books")
+settingtable = db.table("settings")
 
 # Only the services that have been tested with a real account are exposed
 services = {"bsm": "bSmart", "hbs": "Mondadori HUB Scuola", "plc": "Sanoma My Place"}
@@ -128,6 +129,13 @@ def new_login(username, password, checkpassword=True):
 
 def getusers():
 	return [i["name"] for i in usertable.all()]
+
+def getsetting(name, default=""):
+	row = settingtable.get(Query().name == name)
+	return row["value"] if row else default
+
+def settingset(name, value):
+	settingtable.upsert({"name": name, "value": value}, Query().name == name)
 
 def listbooks():
 	return booktable.all()
