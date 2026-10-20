@@ -1,17 +1,82 @@
 name: build apps
 
+# Every push to master/main creates the next version tag (patch bump of the latest
+# tag), builds the apps and publishes the release with the automatic changelog.
+# Manual run: Actions -> build apps -> Run workflow (optionally with a version).
+# To push without a release, put [skip ci] in the commit message.
+
 on:
-  workflow_dispatch:
   push:
-    tags:
-      - "v*"
+    branches:
+      - master
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version for this release (e.g. v1.2.3). Empty = bump the patch of the latest tag."
+        required: false
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  version:
+    name: next version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute the version
+        id: next
+        run: |
+          set -euo pipefail
+          input="${{ inputs.version }}"
+          if [ -n "$input" ]; then
+            tag="$input"
+          else
+            latest="$(git tag -l 'v*' --sort=-v:refname | head -n1)"
+            if [ -z "$latest" ]; then
+              tag="v1.0.0"
+            else
+              base="${latest#v}"
+              major="${base%%.*}"
+              rest="${base#*.}"
+              minor="${rest%%.*}"
+              patch="${rest#*.}"
+              patch=$((patch+1))
+              tag="v${major}.${minor}.${patch}"
+            fi
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version: $tag (expected vMAJOR.MINOR.PATCH)" >&2
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Next release: $tag"
+
+      - name: Create and push the tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.next.outputs.tag }}"
+          git push origin "${{ steps.next.outputs.tag }}"
+
   build:
     name: ${{ matrix.name }}
+    needs: version
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -33,6 +98,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
 
       - uses: actions/setup-python@v5
         with:
@@ -56,10 +123,25 @@ jobs:
             packaging/dist/*.tar.gz
           if-no-files-found: error
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    name: release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download the built apps
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: scuolagrab-*
+          merge-multiple: true
+
+      - name: Show the release files
+        run: ls -lh dist
+
+      - name: Create the release with the changelog
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            packaging/dist/*.AppImage
-            packaging/dist/*.zip
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: scuolagrab ${{ needs.version.outputs.tag }}
+          generate_release_notes: true
+          files: dist/*

@@ -12,6 +12,7 @@ Output (packaging/dist/):
 
 import argparse
 import os
+import platform
 import shutil
 import stat
 import subprocess
@@ -113,12 +114,14 @@ def macos():
 	app = DIST / f"{NAME}.app"
 	if not app.is_dir():
 		raise SystemExit("scuolagrab.app was not created")
-	target = DIST / f"{NAME}-macos.zip"
+	arch = "arm64" if platform.machine() == "arm64" else "x64"
+	target = DIST / f"{NAME}-macos-{arch}.zip"
 	run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", app, target])
 
 def main():
 	parser = argparse.ArgumentParser(description="Build the scuolagrab desktop app")
 	parser.add_argument("--no-browsers", action="store_true", help="do not bundle Chromium (smaller build)")
+	parser.add_argument("--browsers", action="store_true", help="bundle Chromium also on macOS (PyInstaller cannot codesign Chrome's .app on macOS)")
 	args = parser.parse_args()
 
 	BUILD.mkdir(exist_ok=True)
@@ -126,7 +129,13 @@ def main():
 	icon = BUILD / f"{NAME}.png"
 	makeicon(icon)
 
-	browsers = None if args.no_browsers else installbrowsers()
+	bundle = not args.no_browsers
+	if sys.platform == "darwin" and not args.browsers:
+		# codesign fails on Chrome's nested .app: the macOS app downloads Chromium on first run
+		print("macOS: Chromium is not bundled (use --browsers to force it); the app downloads it on first run.", flush=True)
+		bundle = False
+
+	browsers = installbrowsers() if bundle else None
 	pyinstaller(browsers)
 
 	if sys.platform.startswith("linux"):

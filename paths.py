@@ -36,10 +36,18 @@ def datadir():
 	return path
 
 def browsersdir():
-	'''Chromium shipped inside the bundle, None when running from the source tree'''
-	if isfrozen():
-		return bundled() / "browsers"
-	return None
+	'''Where Chromium is looked for.
+	Source tree: None (playwright uses its own default).
+	Frozen: the browsers shipped in the bundle, otherwise a writable folder next to
+	the user data (a macOS .app cannot write inside itself).'''
+	if not isfrozen():
+		return None
+	bundled_browsers = bundled() / "browsers"
+	if bundled_browsers.is_dir() and any(bundled_browsers.iterdir()):
+		return bundled_browsers
+	path = datadir() / "browsers"
+	path.mkdir(parents=True, exist_ok=True)
+	return path
 
 def setup():
 	'''Prepare cwd and the playwright browser path before importing the services'''

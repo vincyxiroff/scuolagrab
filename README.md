@@ -144,7 +144,11 @@ Platform tokens are stored in plain text in `db.json`: the file is gitignored, d
 
 ### Prebuilt apps
 
-Every `v*` tag makes GitHub Actions publish the desktop app:
+Releases are automatic: every push to `master`/`main` makes GitHub Actions create the next version tag (patch bump of the latest tag, `v1.0.0` the first time), build the four apps and publish one release with the files and the changelog generated from commits and pull requests.
+
+- start from a specific version: Actions → **build apps** → **Run workflow**, with `version = v1.2.3`
+- skip the release for a commit: put `[skip ci]` in the commit message
+- the tag is created by the workflow, you never push it by hand
 
 | system | file | notes |
 | ------ | ---- | ----- |
@@ -152,7 +156,7 @@ Every `v*` tag makes GitHub Actions publish the desktop app:
 | Windows x64 | `scuolagrab-windows-x64.zip` → `scuolagrab.exe` | unsigned: SmartScreen → "More info" → "Run anyway" |
 | macOS arm64/x64 | `scuolagrab-macos-*.zip` → `scuolagrab.app` | unsigned: right click → Open, or `xattr -dr com.apple.quarantine scuolagrab.app` |
 
-The apps keep config, database and PDFs in the user data folder: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). Chromium is bundled, so the Sanoma login works out of the box. On Linux, if Chromium complains about missing libraries: `sudo apt install libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1`.
+The apps keep config, database and PDFs in the user data folder: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). On Linux and Windows Chromium is bundled, so the Sanoma login works out of the box; on macOS PyInstaller cannot sign Chrome's nested `.app`, so the app downloads Chromium (~130 MB) on first launch into its data folder. On Linux, if Chromium complains about missing libraries: `sudo apt install libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1`.
 
 ### Build the apps yourself
 
@@ -162,7 +166,9 @@ python3 packaging/build.py                 # bundles Chromium (~400 MB)
 python3 packaging/build.py --no-browsers   # smaller, Sanoma needs Chromium installed later
 ```
 
-The files end up in `packaging/dist/` (AppImage on Linux, ZIP with the `.exe` on Windows, ZIP with the `.app` on macOS). PyInstaller does not cross-compile: build on the target system. `.github/workflows/build.yml` runs the same script on Linux, Windows and macOS and attaches the files to the GitHub release when a `v*` tag is pushed.
+The files end up in `packaging/dist/` (AppImage on Linux, ZIP with the `.exe` on Windows, ZIP with the `.app` on macOS). PyInstaller does not cross-compile: build on the target system. On macOS Chromium is not bundled by default (codesign fails on Chrome's nested `.app`): pass `--browsers` to force it.
+
+`.github/workflows/build.yml` runs the script on Linux, Windows, macOS arm64 and macOS x64, creates the version tag and then one release with every file attached and the changelog generated automatically.
 
 ## Server setup
 
@@ -485,7 +491,11 @@ I token delle piattaforme sono salvati in chiaro in `db.json`: quel file è giti
 
 ### App già pronte
 
-Ogni tag `v*` fa pubblicare a GitHub Actions l'app desktop:
+Le release sono automatiche: ogni push su `master`/`main` fa creare a GitHub Actions il tag della versione successiva (patch incrementata rispetto all'ultimo tag, `v1.0.0` la prima volta), compila le quattro app e pubblica un'unica release con i file e il changelog generato da commit e pull request.
+
+- partire da una versione specifica: Actions → **build apps** → **Run workflow**, con `version = v1.2.3`
+- saltare la release per un commit: metti `[skip ci]` nel messaggio di commit
+- il tag lo crea il workflow, non serve pusharlo a mano
 
 | sistema | file | note |
 | ------- | ---- | ----- |
@@ -493,7 +503,7 @@ Ogni tag `v*` fa pubblicare a GitHub Actions l'app desktop:
 | Windows x64 | `scuolagrab-windows-x64.zip` → `scuolagrab.exe` | non firmata: SmartScreen → "Ulteriori informazioni" → "Esegui comunque" |
 | macOS arm64/x64 | `scuolagrab-macos-*.zip` → `scuolagrab.app` | non firmata: tasto destro → Apri, oppure `xattr -dr com.apple.quarantine scuolagrab.app` |
 
-Le app tengono config, database e PDF nella cartella dati dell'utente: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). Chromium è incluso, quindi il login Sanoma funziona senza installare altro. Su Linux, se Chromium lamenta librerie mancanti: `sudo apt install libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1`.
+Le app tengono config, database e PDF nella cartella dati dell'utente: `~/.local/share/scuolagrab` (Linux), `%APPDATA%\scuolagrab` (Windows), `~/Library/Application Support/scuolagrab` (macOS). Su Linux e Windows Chromium è incluso, quindi il login Sanoma funziona senza installare altro; su macOS PyInstaller non riesce a firmare l'`.app` annidata di Chrome, quindi l'app scarica Chromium (~130 MB) al primo avvio nella sua cartella dati. Su Linux, se Chromium lamenta librerie mancanti: `sudo apt install libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1`.
 
 ### Compilare le app
 
@@ -503,7 +513,9 @@ python3 packaging/build.py                 # include Chromium (~400 MB)
 python3 packaging/build.py --no-browsers   # più piccola, Sanoma richiede Chromium a parte
 ```
 
-I file finiscono in `packaging/dist/` (AppImage su Linux, ZIP con `.exe` su Windows, ZIP con `.app` su macOS). PyInstaller non fa cross-compilazione: compila sul sistema di destinazione. `.github/workflows/build.yml` esegue lo stesso script su Linux, Windows e macOS e allega i file alla release quando pushi un tag `v*`.
+I file finiscono in `packaging/dist/` (AppImage su Linux, ZIP con `.exe` su Windows, ZIP con `.app` su macOS). PyInstaller non fa cross-compilazione: compila sul sistema di destinazione. Su macOS Chromium non è incluso di default (codesign fallisce sull'`.app` annidata di Chrome): usa `--browsers` per forzarlo.
+
+`.github/workflows/build.yml` esegue lo script su Linux, Windows, macOS arm64 e macOS x64, crea il tag di versione e poi un'unica release con tutti i file allegati e il changelog generato automaticamente.
 
 ## Setup del server
 
