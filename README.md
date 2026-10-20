@@ -97,7 +97,7 @@ py gui.py      # GUI
 # Debian/Ubuntu: sudo apt install python3 python3-venv python3-pip git
 # macOS: brew install python3 git
 
-git clone https://github.com/tuonome/scuolagrab.git
+git clone https://github.com/vincyxiroff/scuolagrab.git
 cd scuolagrab
 
 python3 -m venv .venv
@@ -156,9 +156,11 @@ Platform tokens are stored in plain text in `db.json`: the file is gitignored, d
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip git
 
-# dedicated user, no login
-sudo useradd --system --create-home --home-dir /opt/scuolagrab --shell /usr/sbin/nologin scuolagrab
-sudo -u scuolagrab git clone https://github.com/tuonome/scuolagrab.git /opt/scuolagrab
+# dedicated service user without login; the folder is created empty below, so git can clone into it
+sudo useradd --system --home-dir /opt/scuolagrab --shell /usr/sbin/nologin scuolagrab
+sudo mkdir -p /opt/scuolagrab
+sudo chown scuolagrab:scuolagrab /opt/scuolagrab
+sudo -u scuolagrab git clone https://github.com/vincyxiroff/scuolagrab.git /opt/scuolagrab
 
 cd /opt/scuolagrab
 sudo -u scuolagrab python3 -m venv .venv
@@ -426,7 +428,7 @@ py gui.py      # GUI
 # Debian/Ubuntu: sudo apt install python3 python3-venv python3-pip git
 # macOS: brew install python3 git
 
-git clone https://github.com/tuonome/scuolagrab.git
+git clone https://github.com/vincyxiroff/scuolagrab.git
 cd scuolagrab
 
 python3 -m venv .venv
@@ -485,9 +487,11 @@ La cartella `server/` contiene una versione web autonoma, senza framework aggiun
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip git
 
-# utente dedicato, senza login
-sudo useradd --system --create-home --home-dir /opt/scuolagrab --shell /usr/sbin/nologin scuolagrab
-sudo -u scuolagrab git clone https://github.com/tuonome/scuolagrab.git /opt/scuolagrab
+# utente dedicato, senza login; la cartella viene creata qui sotto vuota, così git può clonare dentro
+sudo useradd --system --home-dir /opt/scuolagrab --shell /usr/sbin/nologin scuolagrab
+sudo mkdir -p /opt/scuolagrab
+sudo chown scuolagrab:scuolagrab /opt/scuolagrab
+sudo -u scuolagrab git clone https://github.com/vincyxiroff/scuolagrab.git /opt/scuolagrab
 
 cd /opt/scuolagrab
 sudo -u scuolagrab python3 -m venv .venv
